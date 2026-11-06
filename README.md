@@ -47,11 +47,13 @@ This testing deployment is publicly accessible without sign-in, as requested by
 the owner. AI is enabled automatically using the `gpt-5.4-mini` Azure Foundry
 deployment and an API key stored as a Container App secret, never in source or
 the image. Each page load makes a small live connection-test request.
+Hosted visitors see a read-only AI status; model settings remain available only
+in the local, manually configured preview.
 There are no public usage caps: anyone with the URL can incur model charges.
 Keep provider quota low, monitor costs and add access/usage controls before
 broader distribution. Do not upload confidential buyer information to a public demo.
 
-The private image is `paiosacr44326.azurecr.io/rfx-copilot:20261107-2`.
+The private image is `paiosacr44326.azurecr.io/rfx-copilot:20261107-3`.
 Image pulls use the `rfx-copilot-identity` managed identity with `AcrPull`.
 Rebuild with `az acr build` using the included Dockerfile, then update the app
 image with `az containerapp update`. Git pushes do not automatically deploy.

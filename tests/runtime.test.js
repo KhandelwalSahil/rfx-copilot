@@ -3,6 +3,64 @@ import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { createServer, requestUrl } from '../scripts/dev.mjs';
 import worker from '../worker/index.js';
+import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
+
+const appSource = readFileSync(new URL('../src/app.js', import.meta.url), 'utf8').replace('\nsave();render();', '');
+function appFunction(name) {
+  const declaration = appSource.match(new RegExp(`^(?:async )?function ${name}\\(`, 'm'));
+  const rest = appSource.slice(declaration.index + declaration[0].length);
+  const next = rest.search(/^(?:async )?function /m);
+  return declaration[0] + (next < 0 ? rest : rest.slice(0, next));
+}
+
+test('hosted AI status is non-interactive while local settings remain available', () => {
+  const context = vm.createContext({ serverAiDefault: true, connected: true, config: { allowLive: true } });
+  vm.runInContext(appFunction('modelStatus'), context);
+  const hosted = vm.runInContext('modelStatus()', context);
+  assert.match(hosted, /<span[^>]*role="status"[^>]*>AI connected<\/span>/);
+  assert.doesNotMatch(hosted, /button|data-action|tabindex/);
+  context.serverAiDefault = false;
+  assert.match(vm.runInContext('modelStatus()', context), /<button data-action="settings">/);
+});
+
+test('hosted settings entry points cannot open the editor or disconnect managed AI', async () => {
+  let notices = 0;
+  const context = vm.createContext({
+    serverAiDefault: true,
+    config: { allowLive: true },
+    notify: () => { notices++; },
+    $: () => { throw Error('Hosted settings must not access editor elements'); },
+  });
+  vm.runInContext(appFunction('settings'), context);
+  vm.runInContext('settings()', context);
+  vm.runInContext(appFunction('action'), context);
+  for (const action of ['settings', 'disconnect', 'saveSettings', 'connect']) {
+    await vm.runInContext(`action('${action}')`, context);
+  }
+  assert.equal(context.config.allowLive, true);
+  assert.equal(notices, 5);
+});
+
+test('hosted failure dialogs do not expose model settings', async () => {
+  for (const managed of [true, false]) {
+    const elements = { '#status': { innerHTML: '' }, '#overlay': { innerHTML: '' } };
+    const context = vm.createContext({
+      serverAiDefault: managed,
+      busy: false,
+      $: selector => elements[selector],
+      esc: value => value,
+      buyerError: value => value,
+      lockMutations() {},
+      bindOverlay() {},
+      render() {},
+    });
+    vm.runInContext(appFunction('task'), context);
+    await vm.runInContext("task('Testing',async()=>{throw Error('Provider unavailable');})", context);
+    assert.match(elements['#overlay'].innerHTML, /Provider unavailable/);
+    assert.equal(elements['#overlay'].innerHTML.includes('data-action="settings"'), !managed);
+  }
+});
 
 test('automatic AI opt-in requires a server flag and credential, without exposing the credential', async () => {
   for (const [env, enabled] of [
