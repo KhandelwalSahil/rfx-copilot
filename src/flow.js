@@ -56,7 +56,7 @@ async function generateResponse(v,round=0,clarification=''){
  const extra=(filename,body)=>{const k='Generated-'+crypto.randomUUID()+'-'+filename;assets[k]={mime:'text/plain',base64:btoa(unescape(encodeURIComponent(body))),displayName:filename,generated:true};packageFiles.push(k);};
  if(!sourceProfileV3(state.rfx)&&index===4&&!resolved.offers&&!resolved.specs)extra(simulationHistoryName(v,round),simulationHistory(state.rfx,v,index,round,resolved));
  if(ext==='jpg'&&photoSplit[1])extra(v.replaceAll(' ','-')+'-questionnaire-r'+(round+1)+'.txt','SYNTHETIC SUPPLIER QUESTIONNAIRE\n'+v+'\n'+photoSplit[1]);
- workingFiles[v]=packageFiles;state.packages[v]={files:packageFiles,assets:Object.fromEntries(packageFiles.map(k=>[k,assets[k]])),signature:rfxSourceSignature(state.rfx),round,resolved,generatorVersion:sourceProfileV3(state.rfx)?3:2};
+ workingFiles[v]=packageFiles;state.packages[v]={files:packageFiles,assets:Object.fromEntries(packageFiles.map(k=>[k,assets[k]])),signature:rfxSourceSignature(state.rfx),round,resolved,clarification,generatorVersion:sourceProfileV3(state.rfx)?3:2};
  threadMessage(v,'vendor',round?'Revised quotation attached. Review the updated offer and any remaining open points.':'Quotation received. Review the attached offer for item prices, delivery and commercial terms.',packageFiles);
  invalidate('Simulated vendor response received',{vendor:v,round,files:[name],superseded:old||null});
 }
@@ -76,10 +76,21 @@ function sentInvitationsPage(){
 }
 function supplierMessageSignature(v){return 'concise-v4|'+rfxSourceSignature(state.rfx)+'|'+(state.packages[v]?.files||[]).join('|');}
 function supplierClarificationText(v,lineId=null){if(state.packages[v]?.round>0)return '';const saved=state.clarificationDrafts?.[v];if(!lineId&&saved?.signature===supplierMessageSignature(v))return saved.text;return state.data[v]?clarificationMessage(v,state.rfx,state.data[v],lineId):'';}
+function revisedSimulationRepair(v){
+ const p=state.packages[v];
+ if(p?.round!==1||p.generatorVersion!==3||p.signature!==rfxSourceSignature(state.rfx)||!p.files?.length||p.files.some(k=>!assets[k]?.generated||assets[k]?.custom))return null;
+ const clarification=p.clarification||(state.threads[v]||[]).slice().reverse().find(m=>m.role==='buyer'&&/Please confirm these points for your quotation:/i.test(m.text))?.text;
+ if(!clarification)return null;
+ const resolved=sevenResolution(clarification);
+ return Object.entries(resolved).some(([key,value])=>value&&!p.resolved?.[key])?{clarification}:null;
+}
 function supplierClarificationComposer(v){
  if(!state.data[v])return '';
  const outcome=supplierOfferStatus(state.data,state.rfx,v);
- if(state.packages[v]?.round>0)return `<section class="notice ${outcome.tone}"><b>${outcome.ready?'Ready for comparison':outcome.label}</b><p>Clarification round completed.${outcome.ready?' This offer meets the current comparison checks.':' The offer is not ready for comparison for the reasons below.'}</p>${outcome.reasons.length?'<ul>'+outcome.reasons.map(r=>'<li>'+esc(r)+'</li>').join('')+'</ul>':''}</section>`;
+ if(state.packages[v]?.round>0){
+  const summary=quoteSummary(state.data[v],state.rfx),repair=revisedSimulationRepair(v),discount=state.data[v].discount,retry=summary.internalReviews.length>0||discount&&!(discount.rate>0&&discount.rate<1)||summary.issues.some(i=>i.questionIds?.length);
+  return `<section class="notice ${outcome.tone}"><b>${outcome.ready?'Ready for comparison':outcome.label}</b><p>Clarification round completed.${outcome.ready?' This offer meets the current comparison checks.':' The offer is not ready for comparison for the reasons below.'}</p>${outcome.reasons.length?'<ul>'+outcome.reasons.map(r=>'<li>'+esc(r)+'</li>').join('')+'</ul>':''}${repair?'<p>A previous simulator parser missed part of your existing clarification. Rebuild that same reply and extract it again; no second supplier question is sent.</p><button data-action="repairRevisedReply">Reprocess simulated revised reply</button>':retry?'<p>Retry the extraction against the existing revised documents; no supplier question is sent.</p><button data-action="repairRevisedReply">Re-extract revised reply</button>':''}</section>`;
+ }
 
  if(outcome.ready)return '';
  const message=supplierClarificationText(v),points=(message.match(/^\d+\. /gm)||[]).length;
@@ -114,6 +125,14 @@ function emailEditor(){
 const oldAction=action;
 action=async function(a){
  if(busy)return oldAction(a);
+ if(a==='repairRevisedReply'){
+  const v=inboxVendor,repair=revisedSimulationRepair(v);
+  if(!state.data[v]||state.packages[v]?.round!==1)return notify('Choose an extracted reply from the completed clarification round.');
+  return task('Reprocessing the existing revised reply...',async()=>{
+   if(repair){await generateResponse(v,1,repair.clarification);invalidate('Simulated clarification parser repaired',{vendor:v,round:1,noNewSupplierQuestion:true});}
+   await extract(v);
+  });
+ }
  if(['exportRfxText','previewRfqPdf'].includes(a)){
  if(!rfxReadiness(state.rfx).ready)return openClarificationsWarning();
  return task('Preparing your RFQ PDF…',async()=>{const bytes=await rfqPdfBytes(state.rfx);if(a==='exportRfxText')return download('RFQ-2027-001.pdf',bytes,'application/pdf');let binary='';for(const b of bytes)binary+=String.fromCharCode(b);const key='PDF-preview-'+crypto.randomUUID()+'.pdf';assets[key]={mime:'application/pdf',base64:btoa(binary),displayName:'RFQ-2027-001.pdf'};await preview(key);});

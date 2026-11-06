@@ -18,12 +18,12 @@ const extractionArray=items=>({type:'array',items});
 const extractionText={type:'string'},extractionNullableText={type:['string','null']};
 const extractedTerm={anyOf:[{type:'null'},draftObject({value:extractionText,source:extractionText})]};
 export const extractionResponseFormat={type:'json_schema',name:'vendor_quote_extraction',strict:true,schema:draftObject({
- quotes:extractionArray(draftObject({lineId:{type:'integer'},price:draftNullableNumber,currency:{type:'string',enum:['INR','USD']},unit:extractionText,state:{type:'string',enum:['read','review']},source:extractionText,excerpt:extractionText,availability:extractionNullableText})),
+ quotes:extractionArray(draftObject({lineId:{type:'integer'},price:{...draftNullableNumber,description:'Raw supplier rate for the quoted pricing unit. Never divide pack prices or normalize them to order units.'},currency:{type:'string',enum:['INR','USD']},unit:{...extractionText,description:'Supplier pricing basis including the pack multiplier. In spreadsheets copy Pack / quoted unit, not Order unit.'},state:{type:'string',enum:['read','review']},source:extractionText,excerpt:extractionText,availability:extractionNullableText})),
  commercialTerms:draftObject({delivery:extractedTerm,payment:extractedTerm,validity:extractedTerm,taxes:extractedTerm}),
- answers:extractionArray(draftObject({questionId:extractionText,answer:extractionText,source:extractionText})),
+ answers:{...extractionArray(draftObject({questionId:extractionText,answer:extractionText,source:extractionText})),description:'Include every explicit supplier questionnaire response in the supplied documents, including the entire Terms worksheet. Do not omit answers because the same fact also appears in commercialTerms or freight. Never invent an absent response.'},
  evidence:extractionArray(draftObject({questionId:extractionText,result:{type:'string',enum:['pass','fail','unknown']},validUntil:extractionNullableText,value:draftNullableNumber,source:extractionText,excerpt:extractionText})),
  freight:draftObject({amount:draftNullableNumber,state:{type:'string',enum:['known','unknown']},source:extractionText}),
- discount:{anyOf:[{type:'null'},draftObject({rate:{type:'number'},thresholdReams:{type:'number'},lineIds:extractionArray({type:'integer'}),source:extractionText})]},
+ discount:{anyOf:[{type:'null'},draftObject({rate:{type:'number',minimum:0,maximum:1,description:'Fraction of the quoted amount, never percentage points: 5% is 0.05, not 5.'},thresholdReams:{type:'number'},lineIds:extractionArray({type:'integer'}),source:extractionText})]},
  notes:extractionArray(extractionText),blockers:extractionArray(extractionText)
 })};
 
@@ -92,14 +92,19 @@ export function buildAnalystInput(body){return [
 // Spreadsheet text includes cell labels. Verify the actual price/unit/currency row,
 // rather than requiring a prose excerpt to reproduce those labels verbatim.
 export function spreadsheetQuoteSupported(q,file,rfx){
- if(file.kind!=='text'||!/^SHEET /m.test(file.text||''))return false;
+ return spreadsheetQuoteAssessment(q,file,rfx,true)===true;
+}
+function spreadsheetQuoteAssessment(q,file,rfx,requireCitation){
+ if(file.kind!=='text'||!/^SHEET /m.test(file.text||''))return null;
  const rows=[];for(const line of file.text.split('\n')){const cells={};for(const m of line.matchAll(/\b([A-Z]+)(\d+)=([^|]*)/g)){cells[m[1]]=m[3].trim();cells._row=Number(m[2]);}if(Object.keys(cells).length)rows.push(cells);}
  const citedRows=[...String(q.source).matchAll(/\b(?:row\s+|[A-Z]+)(\d+)\b/gi)].map(m=>Number(m[1]));
  const clean=s=>String(s).toLowerCase().replace(/[^a-z0-9.]/g,'');
  const item=rfx.lines.find(l=>l.id===q.lineId);if(!item)return false;
+ let structured=false;
  for(let h=0;h<rows.length;h++){const header=rows[h],col=pattern=>Object.keys(header).find(k=>pattern.test(header[k]));const price=col(/^(?:unit (?:rate|price)|rate|quoted price)$/i),unit=col(/quoted unit|pricing unit|pack.*unit/i),currency=col(/^currency$/i),name=col(/^(?:description|item name|product)$/i);if(!price||!unit||!currency||!name)continue;
-  if(rows.slice(h+1).some(row=>citedRows.includes(row._row)&&clean(row[name])===clean(item.name)&&clean(row[unit])===clean(q.unit)&&clean(row[currency])===clean(q.currency)&&Number.isFinite(Number(row[price]))&&Math.abs(Number(row[price])-q.price)<1e-8))return true;
- }return false;
+  structured=true;
+  if(rows.slice(h+1).some(row=>(!requireCitation||citedRows.includes(row._row))&&clean(row[name])===clean(item.name)&&clean(row[unit])===clean(q.unit)&&clean(row[currency])===clean(q.currency)&&Number.isFinite(Number(row[price]))&&Math.abs(Number(row[price])-q.price)<1e-8))return true;
+ }return structured?false:null;
 }
 export async function handleAPI(request,env={}){
  if(request.method!=='POST')return json({error:'POST required'},405);
@@ -139,7 +144,13 @@ export async function handleAPI(request,env={}){
     const ref=extractionSource(q,body.files);if(!ref)throw Error('Line '+q.lineId+': the returned source reference could not be matched to this supplier’s files. Please retry extraction.');
     q.source=ref.source;const file=ref.file;
     if(ref.inferred){q.validationIssue='source_reference';q.state='review';result.notes=[...(result.notes||[]),`Line ${q.lineId}: page-only citation linked to the sole supplied PDF; inspect source before using this price.`];}
-    if(file.kind==='text'&&!compact(file.text).includes(compact(q.excerpt))&&!spreadsheetQuoteSupported(q,file,body.rfx)){q.validationIssue='excerpt_mismatch';q.state='review';result.notes=[...(result.notes||[]),`Line ${q.lineId}: excerpt could not be matched literally; inspect original.`];}
+    if(file.kind==='text'){
+     const literal=compact(file.text).includes(compact(q.excerpt)),basis=q.price===null?null:spreadsheetQuoteAssessment(q,file,body.rfx,!literal);
+     if((!literal&&basis!==true)||(literal&&basis===false)){
+      q.validationIssue=literal?'price_basis_mismatch':'excerpt_mismatch';q.state='review';
+      result.notes=[...(result.notes||[]),literal?`Line ${q.lineId}: extracted price, currency or pricing unit does not match the source row; inspect original.`:`Line ${q.lineId}: excerpt could not be matched literally; inspect original.`];
+     }
+    }
    }
    for(const a of result.answers){const ref=extractionSource(a,body.files);if(ref)a.source=ref.source;}
    for(const e of result.evidence){const ref=extractionSource(e,body.files);if(ref)e.source=ref.source;if(e.result==='pass'&&(!ref||ref.inferred||(ref.file.kind==='text'&&!compact(ref.file.text).includes(compact(e.excerpt||'')))))e.result='unknown';}

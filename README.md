@@ -53,7 +53,7 @@ There are no public usage caps: anyone with the URL can incur model charges.
 Keep provider quota low, monitor costs and add access/usage controls before
 broader distribution. Do not upload confidential buyer information to a public demo.
 
-The private image is `paiosacr44326.azurecr.io/rfx-copilot:20261107-3`.
+The private image is `paiosacr44326.azurecr.io/rfx-copilot:20261107-4`.
 Image pulls use the `rfx-copilot-identity` managed identity with `AcrPull`.
 Rebuild with `az acr build` using the included Dockerfile, then update the app
 image with `az containerapp update`. Git pushes do not automatically deploy.
@@ -90,7 +90,7 @@ AERCHAIN_ALLOW_LIVE=true node scripts/rehearse-live.mjs /private/path/workspace-
 node scripts/score-run.mjs /private/path/rehearsal/workspace-record.json
 ```
 
-This runner incurs real provider usage when opted in; it is not a recording. Use the UI to record the required real analyst conversation. Keep exports and keys outside Git. The current hosted site is owner-private; arrange reviewer access before submission.
+This runner incurs real provider usage when opted in; it is not a recording. Use the UI to record the required real analyst conversation. Keep exports and keys outside Git. The current hosted demo is publicly accessible without sign-in.
 
 ## Important boundaries
 
@@ -114,5 +114,7 @@ Optimization covers whole-line assignment, known fixed freight and one percentag
 The product starts with an empty RFx. Enter the purchase requirement in the chat, resolve buyer clarifications, review supplier selection and the RFQ PDF, then approve the invitations. Supplier source documents arrive automatically; NorthStar remains pending. Extract actual packages through the connected model before comparison or analysis.
 
 The seven-supplier source profile supports targeted revisions for Bharat, Jaipur Paper, Rajan and Pioneer, an expensive Metro offer and incompatible QuickDesk terms. No model extraction or analyst response is prefilled. Historical scenario fixtures remain offline developer references only; the product does not expose sample loaders or a test walkthrough.
+
+Only one supplier clarification round is sent. Older generated revisions can expose **Reprocess simulated revised reply** when the simulator missed part of the original clarification; this rebuilds that same round and performs real extraction, retaining source history. Uploaded or modified documents are never rebuilt. **Re-extract revised reply** retries internal extraction against unchanged documents, without another supplier question. Genuine source uncertainty, missing evidence and non-negotiable conflicts remain unresolved; awards use eligible offers, not forced passes. Missing dated FX is a buyer evaluation decision in Compare & Ask.
 
 `node scripts/seven-reference.mjs` prints offline reference calculations, not live model results. Actual Azure model fidelity requires live testing. See DEMO.md for the final validation flow.

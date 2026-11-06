@@ -1,6 +1,6 @@
 // Generates fictional source documents only; comparison data still requires extraction.
 export function simulationResolution(message='',prior={}){
- const t=message.toLowerCase();return {offers:!!prior.offers||/missing.*(?:line|offer)|unquoted|omitted|all.*lines|please quote this requested item|confirm.*(?:current|historical|last year|rates|prices)/.test(t),freight:!!prior.freight||/freight|shipping|delivery charg/.test(t),specs:!!prior.specs||/brand|model|specification|deviation/.test(t),delivery:!!prior.delivery||/delivery date|lead time|delivery commitment|\d+\s+(?:(?:calendar|business|working)\s+)?days/.test(t),evidence:!!prior.evidence||/evidence|certificate|certification|gst|quality/.test(t)};
+ const t=message.toLowerCase();return {offers:!!prior.offers||/missing.*(?:line|offer)|unquoted|not quoted|not offered|omitted|all.*lines|please quote this requested item|confirm.*(?:current|historical|last year|rates|prices)/.test(t),freight:!!prior.freight||/freight|shipping|delivery charg/.test(t),specs:!!prior.specs||/brand|model|specification|deviation/.test(t),delivery:!!prior.delivery||/delivery date|lead time|delivery commitment|\d+\s+(?:(?:calendar|business|working)\s+)?days/.test(t),evidence:!!prior.evidence||/evidence|certificate|certification|gst|quality/.test(t)};
 }
 const simFlags=(round,resolved)=>resolved??{offers:!!round,freight:!!round,specs:!!round,delivery:!!round,evidence:!!round};
 export function simulationRows(rfx,vendorIndex,round=0,resolved=null){
@@ -98,7 +98,7 @@ export function simulationEvidence(rfx,vendor,index,round=0,resolved=null){
 // Seven-supplier rehearsal sources. This module never writes extraction or analyst results.
 export function sevenResolution(message='',prior={}){
  const t=message.toLowerCase(),base=simulationResolution(message,prior);
- return {...base,units:!!prior.units||/pack|carton|100.piece|pricing unit|typed.*(?:rate|schedule)/.test(t),coverage:!!prior.coverage||/pune|hub|location|coverage/.test(t),availability:!!prior.availability||/availability|stock|supply commitment/.test(t)};
+ return {...base,units:!!prior.units||/pack|carton|100.piece|pricing unit|typed.*(?:rate|schedule)/.test(t),coverage:!!prior.coverage||/pune|hub|location|coverage/.test(t),availability:!!prior.availability||/availab(?:ility|le)|stock|supply commitment/.test(t)};
 }
 export function sevenRows(rfx,index,round=0,resolved=null){
  if(index===6)return [];

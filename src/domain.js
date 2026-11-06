@@ -142,6 +142,7 @@ export function supplierOfferStatus(data,rfx,vendor){
  if(s.internalReviews.length)return {code:'extraction',label:'Source review pending',tone:'warn',ready:false,reasons:[s.internalReviews.length+' prices need internal source verification. No supplier clarification is required for this check.']};
  if(s.quality.status!=='pass')return {code:'evidence',label:s.quality.status==='fail'?'Documents do not meet requirements':'Required documents missing',tone:s.quality.status==='fail'?'bad':'warn',ready:false,reasons:readable(s.quality.reasons)};
  if(s.redFlags.length)return {code:'conflict',label:'Requirement not met',tone:'bad',ready:false,reasons:s.redFlags.map(f=>f.detail)};
+ if(s.items.some(l=>l.why==='Valid FX assumption required'))return {code:'evaluation',label:'Exchange rate needed',tone:'warn',ready:false,reasons:['Add a buyer-approved, dated INR-per-USD rate in Compare & Ask. No supplier clarification is needed for currency conversion.']};
  return {code:'incomplete',label:'Offer incomplete',tone:'warn',ready:false,reasons:s.issues.length?s.issues.map(i=>i.title+': '+i.detail):bid?.reasons||['The offer is not ready for full-scope comparison.']};
 }
 
@@ -173,7 +174,10 @@ function unitName(value) {
 export function normalize(q,l,rfx) {
   if (!q) return {price:null,state:'missing',why:'Not quoted',steps:[]};
   const provenance={source:q.source,excerpt:q.excerpt};
-  if (q.price===null) return {...provenance,price:null,state:'review',why:'Price unreadable or unresolved',steps:[]};
+  if (q.price===null) {
+    const missing=/\b(?:not quoted|not offered|no offer)\b/i.test(q.excerpt||'');
+    return {...provenance,price:null,state:missing?'missing':'review',why:missing?'Not quoted':'Price unreadable or unresolved',steps:[]};
+  }
   let p=q.price,steps=[`${q.price} ${q.currency} / ${q.unit}`],state=q.state==='review'?'review':'read';
   const u=unitName(q.unit),target=unitName(l.unit);let basis=1,weight=false;
   if (u!==target) {
@@ -623,8 +627,8 @@ export function saveRfqEmail(rfx,{subject,body}){
 
 // Context labels are not supplier exceptions. Preserve genuine commercial risks.
 function extractedIssueType(text,rfx){
- const b=String(text),risk=/\b(?:expired|exceeds|insufficient|mismatch|cannot supply|unable to supply|not binding|non.binding|indicative only|estimate only|no (?:actual |firm )?quoted prices?|unreadable|unsupported|minimum order)\b/i.test(b);
- if(!risk&&/\b(?:synthetic|demo|demonstration)\b/i.test(b)&&/not a real market quote|treat as unverified|demo (?:data|context|quotation)|synthetic (?:source|pricing|quote)/i.test(b))return 'context';
+ const b=String(text),risk=/\b(?:expired|exceeds|insufficient|mismatch|conflict|advance payment|not served|cannot supply|unable to supply|not binding|non.binding|indicative only|estimate only|no (?:actual |firm )?quoted prices?|unreadable|unsupported|minimum order)\b|freight[^.;\n]{0,35}(?:unknown|not confirmed|not provided)/i.test(b);
+ if(!risk&&/\b(?:synthetic|demo|demonstration)\b/i.test(b)&&(/not a real market quote|treat as unverified|demo (?:data|context|quotation)|synthetic (?:source|pricing|quote)/i.test(b)||/^\s*The quotation is a synthetic demonstration document;\s*treat extracted commercial terms and evidence as unverified source data\.?\s*$/i.test(b)))return 'context';
  if(!risk&&/forecast values|buyer.baseline|reference\/buyer.baseline|reference.*language/i.test(b)&&/no buyer.verified|not independently verified|commercial evidence.*(?:absent|not present)|no.*commercial evidence/i.test(b))return 'context';
  const evidenceRequired=rfx.questions.some(q=>q.gate||/evidence|certificat|sample.approval|test report/i.test(q.text));
  if(!evidenceRequired&&/evidence|certificat|sample.approval/i.test(b)&&/not (?:a |an )?blocker|no .*requested|(?:not|never) requested/i.test(b))return 'context';
@@ -690,7 +694,7 @@ function supplierBuyerPayment(rfx){const clauses=(rfx.terms||'').split(/[.;\n]/)
 export function quoteSummary(x,rfx){
  const items=rfx.lines.map(l=>{const q=x.quotes.find(q=>q.lineId===l.id),n=normalize(q,l,rfx);return {id:l.id,name:l.name,quantity:l.quantity,unit:l.unit,rawPrice:q?.price??null,currency:q?.currency||null,pricingUnit:q?.unit||null,price:n.price,amount:n.price===null?null:round(n.price*l.quantity),state:n.state,why:n.why||'',source:q?.source||'',excerpt:q?.excerpt||'',availability:q?(typeof q.availability==='string'&&q.availability.trim()?q.availability:'Stock availability not stated'):'Not quoted'};});
  const internalReviews=items.filter(l=>l.state==='review'&&(l.price!==null&&!l.why||x.quotes.find(q=>q.lineId===l.id)?.validationIssue||(x.notes||[]).some(n=>new RegExp('^Line '+l.id+':.*(?:excerpt could not|page-only citation)','i').test(n))));
- const issues=items.filter(l=>l.state!=='read'&&!internalReviews.some(i=>i.id===l.id)).map(l=>({title:'Line '+l.id+' · '+l.name,detail:l.state==='missing'?'Please quote this requested item.':l.why||'Confirm this price and pricing unit.',lineId:l.id}));
+ const issues=items.filter(l=>l.state!=='read'&&l.why!=='Valid FX assumption required'&&!internalReviews.some(i=>i.id===l.id)).map(l=>({title:'Line '+l.id+' · '+l.name,detail:l.state==='missing'?'Please quote this requested item.':l.why||'Confirm this price and pricing unit.',lineId:l.id}));
  if(x.freight?.state!=='known')issues.push({title:'Freight not confirmed',detail:'Confirm the freight charge, or explicitly confirm that delivery is included.'});
  if(items.some(l=>/not confirmed|unconfirmed|pending/i.test(l.availability)))issues.push({title:'Confirm supply availability',detail:'Confirm supply availability for '+[...new Set(items.filter(l=>/not confirmed|unconfirmed|pending/i.test(l.availability)).map(l=>l.availability))].join('; ')});
  for(const b of actionableBlockers(x,rfx))issues.push({title:'Terms to discuss',detail:b});

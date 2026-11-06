@@ -12,7 +12,7 @@ for(const vendor of participatingVendors(run.rfx)){
  const expected=simulationRows(run.rfx,index,pack.round,pack.resolved),historical=pack.generatorVersion===2&&index===4&&!pack.resolved?.offers&&!pack.resolved?.specs;
  for(const line of run.rfx.lines){
   const raw=expected.find(q=>q.id===line.id),actual=data.quotes.find(q=>q.lineId===line.id),slot={vendor,lineId:line.id,correct:false};
-  if(!raw){slot.correct=!actual;if(actual)errors.push({vendor,lineId:line.id,error:'Invented omitted offer'});}
+  if(!raw){slot.correct=!actual||normalize(actual,line,run.rfx).state==='missing';if(!slot.correct)errors.push({vendor,lineId:line.id,error:'Invented omitted offer'});}
   else if(!actual)errors.push({vendor,lineId:line.id,error:'Missed quoted item'});
   else{
    // Independent arithmetic from the generated source rate and pack multiplier.
