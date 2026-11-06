@@ -2,6 +2,21 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { createServer, requestUrl } from '../scripts/dev.mjs';
+import worker from '../worker/index.js';
+
+test('automatic AI opt-in requires a server flag and credential, without exposing the credential', async () => {
+  for (const [env, enabled] of [
+    [{}, false],
+    [{ RFX_AUTO_CONNECT: 'true' }, false],
+    [{ OPENAI_API_KEY: 'private-runtime-test-key' }, false],
+    [{ RFX_AUTO_CONNECT: 'true', OPENAI_API_KEY: 'private-runtime-test-key' }, true],
+  ]) {
+    const response = await worker.fetch(new Request('https://rfx.test/'), env);
+    const html = await response.text();
+    assert.ok(html.includes(`const serverAiDefault=${enabled};`));
+    assert.ok(!html.includes('private-runtime-test-key'));
+  }
+});
 
 test('Azure requests use the canonical HTTPS origin, not forwarded client headers', () => {
   const req = { url: '/api', headers: { host: 'localhost:8080', 'x-forwarded-proto': 'http', 'x-forwarded-host': 'other.test' } };

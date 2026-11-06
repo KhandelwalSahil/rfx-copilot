@@ -24,7 +24,7 @@ Never commit credentials or real buyer exports.
 
 ## Real AI and simulated plumbing
 
-Live AI defaults OFF. Configure a vision-capable Azure deployment in Model settings and explicitly enable live requests. Browser-entered credentials stay in page memory and clear on reload; no key is stored in localStorage. Alternatively supply OPENAI_API_KEY, MODEL_BASE_URL and MODEL_DEPLOYMENT on the server.
+Live AI defaults OFF for local preview. Configure a vision-capable Azure deployment in Model settings and explicitly enable live requests. Browser-entered credentials stay in page memory and clear on reload; no key is stored in localStorage. Alternatively supply OPENAI_API_KEY, MODEL_BASE_URL and MODEL_DEPLOYMENT on the server. Set `RFX_AUTO_CONNECT=true` to enable AI and run a small connection test automatically on each page load; credentials stay on the server.
 
 For local server credentials, copy `.env.example` to `.env` and fill in the key,
 the API base URL (ending in `/openai/v1/`, not `/responses`) and deployment name.
@@ -33,8 +33,8 @@ The preview binds to localhost. Azure App Service uses `npm start`, its assigned
 `PORT`, and the canonical HTTPS `WEBSITE_HOSTNAME` for same-origin API checks.
 Container Apps uses the included `Dockerfile`; set `PUBLIC_ORIGIN` to the exact
 HTTPS application URL so the server binds externally and validates browser origins.
-Require platform authentication before configuring a hosted server key, and
-restrict authorized users so other visitors cannot spend your model quota.
+For production, protect a hosted server key with authentication and usage controls
+so untrusted visitors cannot spend your model quota.
 
 ## Azure deployment
 
@@ -43,14 +43,15 @@ in `rg-aerchain-demo`, using one consumption Container App (0.5 vCPU, 1 GiB,
 zero minimum / one maximum replica). Cold starts are expected. Compute, image
 build/storage and model usage can incur charges.
 
-Microsoft Entra authentication restricts access to the configured owner identity.
-The Azure Foundry deployment is `gpt-5.4-mini`; its API key and the sign-in client
-secret are Container App secrets, not image contents or source files.
-Live AI still requires explicit opt-in in Model settings; leave the connection
-fields empty to use the configured server settings. Rotate the sign-in client
-secret before its six-month expiry.
+This testing deployment is publicly accessible without sign-in, as requested by
+the owner. AI is enabled automatically using the `gpt-5.4-mini` Azure Foundry
+deployment and an API key stored as a Container App secret, never in source or
+the image. Each page load makes a small live connection-test request.
+There are no public usage caps: anyone with the URL can incur model charges.
+Keep provider quota low, monitor costs and add access/usage controls before
+broader distribution. Do not upload confidential buyer information to a public demo.
 
-The private image is `paiosacr44326.azurecr.io/rfx-copilot:20261107-1`.
+The private image is `paiosacr44326.azurecr.io/rfx-copilot:20261107-2`.
 Image pulls use the `rfx-copilot-identity` managed identity with `AcrPull`.
 Rebuild with `az acr build` using the included Dockerfile, then update the app
 image with `az containerapp update`. Git pushes do not automatically deploy.
