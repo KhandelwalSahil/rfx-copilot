@@ -1,0 +1,17 @@
+From: quotes@quickdesk.example
+Subject: Re RFQ-2027 Office supplies
+
+Line 1 paper 75 GSM INR 265/ream; line 22 garbage bags INR 144/kg. 70 GSM and all remaining lines same as FY26 contract attached. Freight extra, amount to follow. GST extra.
+QUESTIONNAIRE RESPONSE QuickDesk
+Q1: Yes. Certificate QuickDesk-QMS-2026 attached.
+Q2: Yes. Paper scope report attached for 70, 75 and 80 GSM.
+Q3: Refer buyer sample approval register attached.
+Q4: Synthetic GST ID TEST-QUICKDESK-001.
+Q5: 18000 reams monthly.
+Q6: 7 days.
+Q7: 45 days.
+Q8: 31 December 2026.
+Q9: Freight extra, amount to be confirmed.
+Q10: Defects replaced within 7 days.
+Q11: None.
+Q12: All specifications match, OEM toner only.

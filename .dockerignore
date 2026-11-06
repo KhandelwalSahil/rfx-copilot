@@ -1,0 +1,15 @@
+**
+!Dockerfile
+!package.json
+!scripts/
+!scripts/compose.mjs
+!scripts/build.mjs
+!scripts/dev.mjs
+!scripts/validate-artifact.mjs
+!src/
+!src/**
+src/preview.html
+!dataset/
+!dataset/rfx.json
+!.openai/
+!.openai/hosting.json

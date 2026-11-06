@@ -1,0 +1,324 @@
+{
+  "title": "Office and housekeeping supplies annual rate contract",
+  "scope": "Three regional service hubs supporting a 50,000-person network. Forecast consumption only, monthly call-offs. 1 Apr 2027 to 31 Mar 2028.",
+  "deadline": "2026-11-14",
+  "currency": "INR",
+  "fx": 84,
+  "fxDate": "2026-11-05",
+  "fxNote": "Synthetic planning assumption, not a market rate",
+  "terms": "Delivered to Delhi, Bengaluru and Pune hubs. Exclude recoverable GST from evaluated cost; display tax separately. Prices fixed in the quoted currency through the contract period. INR and USD quotations accepted; compare offers in INR using the buyer-approved dated FX. No minimum volume commitment. Annual forecast used only for evaluation. All discounts evaluated against actual scenario allocation. Reply in any format. Deadline 14 Nov 2026, 18:00 IST.",
+  "lines": [
+    {
+      "id": 1,
+      "name": "A4 paper 75 GSM",
+      "spec": "500 sheets, white, 75 GSM",
+      "quantity": 66000,
+      "unit": "ream",
+      "baseline": 270
+    },
+    {
+      "id": 2,
+      "name": "A4 paper 70 GSM",
+      "spec": "500 sheets, white, 70 GSM",
+      "quantity": 24000,
+      "unit": "ream",
+      "baseline": 245
+    },
+    {
+      "id": 3,
+      "name": "A4 paper 80 GSM",
+      "spec": "500 sheets, white, 80 GSM",
+      "quantity": 18000,
+      "unit": "ream",
+      "baseline": 295
+    },
+    {
+      "id": 4,
+      "name": "A3 paper 75 GSM",
+      "spec": "500 sheets, white",
+      "quantity": 6000,
+      "unit": "ream",
+      "baseline": 540
+    },
+    {
+      "id": 5,
+      "name": "Blue ballpoint pen",
+      "spec": "0.7 mm, blue",
+      "quantity": 30000,
+      "unit": "piece",
+      "baseline": 8
+    },
+    {
+      "id": 6,
+      "name": "Black ballpoint pen",
+      "spec": "0.7 mm, black",
+      "quantity": 15000,
+      "unit": "piece",
+      "baseline": 8
+    },
+    {
+      "id": 7,
+      "name": "Sticky notes",
+      "spec": "76 x 76 mm, 100 sheets",
+      "quantity": 6000,
+      "unit": "pad",
+      "baseline": 25
+    },
+    {
+      "id": 8,
+      "name": "Permanent marker",
+      "spec": "black, 2 mm",
+      "quantity": 3750,
+      "unit": "piece",
+      "baseline": 18
+    },
+    {
+      "id": 9,
+      "name": "Whiteboard marker",
+      "spec": "blue, refillable",
+      "quantity": 4500,
+      "unit": "piece",
+      "baseline": 24
+    },
+    {
+      "id": 10,
+      "name": "Lever arch file",
+      "spec": "A4, 75 mm spine",
+      "quantity": 4500,
+      "unit": "piece",
+      "baseline": 85
+    },
+    {
+      "id": 11,
+      "name": "Ring binder",
+      "spec": "A4, 2 ring",
+      "quantity": 3000,
+      "unit": "piece",
+      "baseline": 55
+    },
+    {
+      "id": 12,
+      "name": "Document folder",
+      "spec": "A4, polypropylene",
+      "quantity": 9000,
+      "unit": "piece",
+      "baseline": 15
+    },
+    {
+      "id": 13,
+      "name": "Staple pins",
+      "spec": "24/6, 1000 pins",
+      "quantity": 3000,
+      "unit": "box",
+      "baseline": 12
+    },
+    {
+      "id": 14,
+      "name": "Stapler",
+      "spec": "24/6, 20 sheet capacity",
+      "quantity": 750,
+      "unit": "piece",
+      "baseline": 110
+    },
+    {
+      "id": 15,
+      "name": "Notebook",
+      "spec": "A5, 160 ruled pages",
+      "quantity": 7500,
+      "unit": "piece",
+      "baseline": 45
+    },
+    {
+      "id": 16,
+      "name": "Packing tape",
+      "spec": "48 mm x 65 m",
+      "quantity": 4500,
+      "unit": "roll",
+      "baseline": 38
+    },
+    {
+      "id": 17,
+      "name": "Scissors",
+      "spec": "8 inch stainless steel",
+      "quantity": 750,
+      "unit": "piece",
+      "baseline": 65
+    },
+    {
+      "id": 18,
+      "name": "Desk tissue",
+      "spec": "2 ply, 100 pulls",
+      "quantity": 12000,
+      "unit": "box",
+      "baseline": 35
+    },
+    {
+      "id": 19,
+      "name": "Toilet tissue",
+      "spec": "2 ply, 200 sheets",
+      "quantity": 18000,
+      "unit": "roll",
+      "baseline": 22
+    },
+    {
+      "id": 20,
+      "name": "Hand towel",
+      "spec": "2 ply, 150 sheets",
+      "quantity": 12000,
+      "unit": "pack",
+      "baseline": 45
+    },
+    {
+      "id": 21,
+      "name": "Floor cleaner",
+      "spec": "5 litre can, neutral pH",
+      "quantity": 3000,
+      "unit": "can",
+      "baseline": 340
+    },
+    {
+      "id": 22,
+      "name": "Garbage bags",
+      "spec": "30 x 50 inch, 25 bags, 0.50 kg per pack",
+      "quantity": 12000,
+      "unit": "pack",
+      "baseline": 75
+    },
+    {
+      "id": 23,
+      "name": "Hand wash",
+      "spec": "5 litre can, pH 5.5 to 7",
+      "quantity": 3000,
+      "unit": "can",
+      "baseline": 360
+    },
+    {
+      "id": 24,
+      "name": "Nitrile gloves",
+      "spec": "powder free, medium, 100 gloves",
+      "quantity": 4500,
+      "unit": "box",
+      "baseline": 210
+    },
+    {
+      "id": 25,
+      "name": "Microfibre cloth",
+      "spec": "40 x 40 cm, 300 GSM",
+      "quantity": 6000,
+      "unit": "piece",
+      "baseline": 35
+    },
+    {
+      "id": 26,
+      "name": "Paper cup",
+      "spec": "150 ml, food grade",
+      "quantity": 300000,
+      "unit": "piece",
+      "baseline": 0.8
+    },
+    {
+      "id": 27,
+      "name": "Wooden stirrer",
+      "spec": "140 mm, food grade",
+      "quantity": 300000,
+      "unit": "piece",
+      "baseline": 0.35
+    },
+    {
+      "id": 28,
+      "name": "Toner HP 12A",
+      "spec": "genuine OEM, sealed, QA approval required",
+      "quantity": 450,
+      "unit": "cartridge",
+      "baseline": 2300
+    },
+    {
+      "id": 29,
+      "name": "Toner HP 88A",
+      "spec": "genuine OEM, sealed, QA approval required",
+      "quantity": 300,
+      "unit": "cartridge",
+      "baseline": 2400
+    },
+    {
+      "id": 30,
+      "name": "Toner HP 05A",
+      "spec": "genuine OEM, sealed, QA approval required",
+      "quantity": 225,
+      "unit": "cartridge",
+      "baseline": 3100
+    }
+  ],
+  "questions": [
+    {
+      "id": "Q1",
+      "text": "Quality system certificate valid through 31 Mar 2028",
+      "gate": true,
+      "rule": {
+        "type": "date_on_or_after",
+        "date": "2028-03-31"
+      }
+    },
+    {
+      "id": "Q2",
+      "text": "Paper test report supplied and matches 70/75/80 GSM scope",
+      "gate": true,
+      "rule": {
+        "type": "evidence_pass"
+      }
+    },
+    {
+      "id": "Q3",
+      "text": "Buyer sample approval recorded for offered specifications",
+      "gate": true,
+      "rule": {
+        "type": "evidence_pass"
+      }
+    },
+    {
+      "id": "Q4",
+      "text": "GST registration identifier",
+      "gate": false
+    },
+    {
+      "id": "Q5",
+      "text": "Monthly paper capacity in reams",
+      "gate": false
+    },
+    {
+      "id": "Q6",
+      "text": "Delivery lead time in days",
+      "gate": false
+    },
+    {
+      "id": "Q7",
+      "text": "Payment term in days",
+      "gate": false
+    },
+    {
+      "id": "Q8",
+      "text": "Quote valid until",
+      "gate": false
+    },
+    {
+      "id": "Q9",
+      "text": "Freight basis",
+      "gate": false
+    },
+    {
+      "id": "Q10",
+      "text": "Returns and replacement policy",
+      "gate": false
+    },
+    {
+      "id": "Q11",
+      "text": "Subcontracting disclosure",
+      "gate": false
+    },
+    {
+      "id": "Q12",
+      "text": "Brand and specification deviations",
+      "gate": false
+    }
+  ]
+}

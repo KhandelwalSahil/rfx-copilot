@@ -1,0 +1,19 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';
+import {normalize,comparison,split,quality,validateExtraction} from '../src/domain.js';
+const rfx=JSON.parse(readFileSync(new URL('../dataset/rfx.json',import.meta.url)));
+const l=rfx.lines;
+function vendor(p=10){return {blockers:[],quotes:l.map(l=>({lineId:l.id,price:p,currency:'INR',unit:l.unit,state:'read',source:'test p1',excerpt:'test quoted price'})),answers:[],evidence:rfx.questions.filter(q=>q.gate).map(q=>({questionId:q.id,result:'pass',validUntil:'2028-12-31',source:'test evidence',excerpt:'test evidence'})),freight:{amount:0,state:'known',source:'test included freight'},discount:null};}
+test('carton, hundred and kg conversions use explicit basis',()=>{assert.equal(normalize({price:1250,currency:'INR',unit:'carton (5 reams)',state:'read'},l[0],rfx).price,250);assert.equal(normalize({price:800,currency:'INR',unit:'100 pieces',state:'read'},l[4],rfx).price,8);assert.equal(normalize({price:144,currency:'INR',unit:'kg',state:'read'},l[21],rfx).price,72);});
+test('unknown units and missing prices never become zero',()=>{assert.equal(normalize({price:42,currency:'INR',unit:'box',state:'read'},l[0],rfx).price,null);assert.equal(normalize(null,l[0],rfx).price,null);});
+test('USD normalization is sensitive to actual FX',()=>{const q={price:30,currency:'USD',unit:'cartridge',state:'read'};assert.equal(normalize(q,l[27],rfx).price,2520);assert.equal(normalize(q,l[27],{...rfx,fx:90}).price,2700);});
+test('certificate expiry overrides vendor self declaration',()=>{let x=vendor();x.evidence[0].validUntil='2026-09-30';assert.equal(quality(x,rfx).status,'fail');x.evidence[0].validUntil=null;assert.equal(quality(x,rfx).status,'unknown');});
+test('27 of 30 bid cannot rank as full bid',()=>{let x=vendor();x.quotes=x.quotes.slice(0,27);const v=comparison({Metro:x},rfx)[0];assert.equal(v.coverage,27);assert.equal(v.total,null);});
+test('unknown freight blocks landed total and allocation',()=>{let x=vendor();x.freight={amount:null,state:'unknown'};assert.equal(comparison({Metro:x},rfx)[0].total,null);assert.equal(split({Metro:x},rfx).complete,false);});
+test('review prices cannot win until corrected',()=>{let a=vendor(1),b=vendor(10);a.quotes[0].state='review';let s=split({Metro:a,Bharat:b},rfx);assert.equal(s.allocations.find(a=>a.lineId===1).vendor,'Bharat');});
+test('failed quality never wins by lowest price',()=>{let a=vendor(1),b=vendor(10);a.evidence[0].validUntil='2026-09-30';let s=split({Metro:a,Bharat:b},rfx);assert.equal(s.allocations.length,30);assert(s.allocations.every(x=>x.vendor==='Bharat'));});
+test('discount recomputes on awarded paper allocation and can change winner',()=>{let a=vendor(10),b=vendor(9.9);a.discount={rate:.1,thresholdReams:80000};let s=split({Metro:a,Bharat:b},rfx);const paper=s.allocations.filter(a=>a.lineId<=4);assert(paper.every(a=>a.vendor==='Metro'));assert(s.byVendor.find(v=>v.vendor==='Metro').discount>0);});
+test('fixed freight changes optimal active vendor set',()=>{let a=vendor(10),b=vendor(11);a.freight={amount:100000000,state:'known',source:'test fixed freight'};let s=split({Metro:a,Bharat:b},rfx);assert.equal(s.allocations.length,30);assert(s.allocations.every(a=>a.vendor==='Bharat'));});
+test('changing one input propagates without answer fixtures',()=>{let a=vendor(10);let before=split({Metro:a},rfx).total;a.quotes[4].price=20;assert.equal(split({Metro:a},rfx).total-before,10*l[4].quantity);});
+test('malformed and duplicate model rows rejected',()=>{let a=vendor();a.quotes.push(a.quotes[0]);assert.throws(()=>validateExtraction(a,rfx),/duplicate/);});
+
+test('unsupported commercial conditions prevent allocation',()=>{let a=vendor(1),b=vendor(10);a.blockers=['MOQ 100000'];assert.equal(comparison({Metro:a},rfx)[0].total,null);assert(split({Metro:a,Bharat:b},rfx).allocations.every(x=>x.vendor==='Bharat'));});

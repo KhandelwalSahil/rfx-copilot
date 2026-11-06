@@ -1,0 +1,9 @@
+.env
+.env.*
+!.env.example
+node_modules/
+dist/
+.sites-runtime/
+__pycache__/
+src/preview.html
+*.tar.gz
