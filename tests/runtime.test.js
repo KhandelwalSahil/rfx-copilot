@@ -32,6 +32,31 @@ test('a supplier query cannot open a permanently disabled composer during anothe
  vm.runInContext(code,context);vm.runInContext("supplierQueryDialog('Rajan')",context);
  assert.match(notices[0],/wait for the current operation/);
 });
+test('New RFx clears documents, saved history and transient UI without disconnecting AI or reopening a stale preview',async()=>{
+ const html=await (await worker.fetch(new Request('https://rfx.test/'))).text(),script=html.match(/<script type="module">([\s\S]*?)<\/script>/)[1];
+ const elements={'#root':{innerHTML:''},'#overlay':{innerHTML:''},'#status':{innerHTML:''}},saved=new Map(),revoked=[];
+ let finishRead;const sourceRead=new Promise(resolve=>{finishRead=resolve;});
+ const context=vm.createContext({structuredClone,setTimeout,clearTimeout,setInterval,clearInterval,File,Blob,atob,btoa,sourceRead,fixture:sevenReference({revised:true}),URL:{createObjectURL:()=> 'blob:previous-quote',revokeObjectURL:url=>revoked.push(url)},window:{addEventListener(){}},document:{querySelector:s=>elements[s]||null,querySelectorAll:()=>[]},localStorage:{getItem:key=>saved.get(key)||null,setItem:(key,value)=>saved.set(key,value)}});
+ vm.runInContext(script,context);
+ vm.runInContext(`state={...state,rfx:fixture.rfx,data:fixture.data,threads:{Rajan:[{text:'Old conversation'}]},packages:{Rajan:{files:['old.docx']}},responseHistory:{Rajan:[{}]},extractionJobs:{Rajan:{status:'failed'}},outbound:{body:'Old email'},emailDraft:{subject:'Old subject'},previousQuotes:{Rajan:{}},packageHistory:[{}],decision:{reason:'Old decision'},decisionHistory:[{}],audit:[{}],chat:[{text:'Old answer'}],draftChat:[{text:'Old requirement'}],supplierQueryDrafts:{Rajan:'Old query'},clarificationDrafts:{Rajan:{text:'Old clarification'}},awaitingSuppliers:{NorthStar:{}},replyErrors:{Rajan:'Old error'},selectedVendors:['Rajan']};stored=structuredClone(state);draftInput='Old draft';askInput='Old question';clarificationAnswers={'Old clarification':'Old answer'};buyerSuggestions={context:'old',suggestions:[{}]};awardDraft={version:9,reason:'Old rationale',evidence:true,assumptions:true,pending:true};reviewFilter='review';qualityFilter=false;commonFilter=true;comparableOnly=true;insightsMode='ask';view='compare';inboxVendor='Rajan';rfqPdfCache={signature:'old',bytes:[1]};assets['old.docx']={base64:btoa('Old document'),displayName:'old.docx',mime:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'};assets['old-outbound.pdf']={};workingFiles.Rajan=['old.docx'];config={base:'',model:'',key:'',allowLive:true};connected=true;prepare=()=>sourceRead;saveSoon();`,context);
+ elements['#status'].innerHTML='Old progress';
+ const preview=vm.runInContext("preview('old.docx')",context);
+ await vm.runInContext("action('confirm-blank')",context);
+ const reset=JSON.parse(vm.runInContext("JSON.stringify({state,assets:Object.keys(assets),workingFiles,stored,reviewFilter,qualityFilter,commonFilter,comparableOnly,insightsMode,inboxVendor,rfqPdfCache,buyerSuggestions,awardDraft,view,tab,config,connected})",context));
+ finishRead({text:'Old document text'});await preview;
+ assert.deepEqual(reset.assets,[]);assert.equal(reset.stored,null);assert.equal(reset.rfqPdfCache,null);
+ assert.equal(reset.state.rfx.lines.length,0);assert.equal(reset.state.rfx.questions.length,0);
+ for(const key of ['data','threads','packages','responseHistory','extractionJobs'])assert.deepEqual(reset.state[key],{});
+ for(const key of ['audit','chat','draftChat','decisionHistory'])assert.deepEqual(reset.state[key],[]);
+ for(const key of ['outbound','emailDraft','previousQuotes','packageHistory','supplierQueryDrafts','clarificationDrafts','awaitingSuppliers','replyErrors'])assert.equal(reset.state[key],undefined);
+ assert.equal(reset.state.decision,null);assert.equal(reset.state.sent,false);assert.equal(reset.state.draft,null);
+ assert(Object.values(reset.workingFiles).every(files=>files.length===0));
+ assert.deepEqual(reset.state.ui,{draftInput:'',askInput:'',clarificationAnswers:{}});
+ assert.deepEqual([reset.reviewFilter,reset.qualityFilter,reset.commonFilter,reset.comparableOnly,reset.insightsMode,reset.inboxVendor,reset.view,reset.tab],['all',true,false,false,'compare','Metro','define','prices']);
+ assert.equal(reset.buyerSuggestions,null);assert.equal(reset.awardDraft.reason,'');assert.equal(reset.config.allowLive,true);assert.equal(reset.connected,true);
+ assert.deepEqual(revoked,['blob:previous-quote']);assert.equal(elements['#overlay'].innerHTML,'');assert.equal(elements['#status'].innerHTML,'');
+ assert.deepEqual(JSON.parse(saved.get('aerchain-v1')),reset.state);
+});
 test('real New RFx lifecycle and legacy recovery support extraction failures and successful retry',async()=>{
  const html=await (await worker.fetch(new Request('https://rfx.test/'))).text(),script=html.match(/<script type="module">([\s\S]*?)<\/script>/)[1];
  const elements={'#root':{innerHTML:''},'#overlay':{innerHTML:''},'#status':{innerHTML:''}};

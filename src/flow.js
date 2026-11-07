@@ -203,7 +203,7 @@ action=async function(a){
  if(a==='sendSupplierMessage'){const v=$('#supplierMessageVendor').value;if(state.packages[v]?.round>0)return notify('Clarification completed. Review the supplier outcome instead of starting another round.');const text=$('#supplierMessageText').value.trim();if(!text){$('#supplierMessageError').textContent='Enter a message before sending.';return;}return task('Sending your message…',async()=>{threadMessage(v,'buyer',text);await generateResponse(v,(state.packages[v]?.round||0)+1,text);view='inbox';save();render();await reviewRevisedReply(v);});}
  if(a==='sendClarification'){const v=$('#clarifyVendor').value;if(state.packages[v]?.round>0)return notify('Clarification completed. Review the supplier outcome instead of starting another round.');const text=$('#clarifyText').value.trim();if(!text||!$('#clarifyApprove').checked)return inlineError('Enter a question and approve sending.');return task('Sending your clarification…',async()=>{threadMessage(v,'buyer',text);await generateResponse(v,(state.packages[v]?.round||0)+1,text);$('#overlay').innerHTML='';view='inbox';save();render();await reviewRevisedReply(v);});}
  await oldAction(a);
- if(a==='confirm-blank'){clarificationAnswers={};state.packages={};state.threads={};state.responseHistory={};state.sentSignature=null;for(const v of VENDORS)workingFiles[v]=[];save();render();}
+ if(a==='confirm-blank'){inboxVendor=VENDORS[0];rfqPdfCache=null;bulkExtracting=false;state.sentSignature=null;save();render();}
 };
 async function reviewRevisedReply(v){
  if(!config.allowLive)return notify('Revised reply received. Enable AI and extract it to update the comparison.');
