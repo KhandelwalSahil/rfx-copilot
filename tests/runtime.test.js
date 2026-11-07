@@ -118,6 +118,31 @@ test('composed Ask page reopens saved answers and handles failures without dropp
   assert.equal(vm.runInContext('busy', context), false);
 });
 
+test('comparison headers visibly distinguish incompatible, incomplete, complete, excluded and pending offers', async () => {
+  const html = await (await worker.fetch(new Request('https://rfx.test/'))).text();
+  const script = html.match(/<script type="module">([\s\S]*?)<\/script>/)[1];
+  const elements = { '#root': { innerHTML: '' }, '#overlay': { innerHTML: '' }, '#status': { innerHTML: '' } };
+  const context = vm.createContext({
+    structuredClone, setTimeout, clearTimeout,
+    window: { addEventListener() {} },
+    document: { querySelector: selector => elements[selector] || null, querySelectorAll: () => [] },
+    localStorage: { getItem: () => null, setItem() {} },
+  });
+  vm.runInContext(script, context);
+  const { rfx, data } = sevenReference({ revised: true });
+  data.Rajan.freight = { state: 'unknown', amount: null, source: '' };
+  context.fixture = { rfx, data };
+  vm.runInContext('state.rfx=fixture.rfx;state.data=fixture.data;state.sent=true;', context);
+  const before = JSON.stringify(data);
+  const headers = vm.runInContext('supplierOverview(comparison(state.data,state.rfx))', context).match(/<thead>[\s\S]*?<\/thead>/)[0];
+  assert.match(headers, /<b>QuickDesk<\/b><span class="tag bad">Requirement not met<\/span>/);
+  assert.match(headers, /<b>Rajan<\/b><span class="tag warn">Offer incomplete<\/span>/);
+  assert.match(headers, /<b>Bharat<\/b><span class="tag ">Lowest comparable cost<\/span>/);
+  assert.match(headers, /<b>Metro<\/b><span class="tag ">Excluded<\/span>/);
+  assert.match(headers, /<b>NorthStar<\/b><span class="tag ">Awaiting response<\/span>/);
+  assert.equal(JSON.stringify(data), before);
+});
+
 test('automatic AI opt-in requires a server flag and credential, without exposing the credential', async () => {
   for (const [env, enabled] of [
     [{}, false],
