@@ -850,9 +850,15 @@ export async function withOperationTimeout(operation,ms,message){
  let timer;try{return await Promise.race([operation(),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error(message)),ms);})]);}finally{clearTimeout(timer);}
 }
 export async function extractAvailable(vendors,read,onProgress=()=>{}){
- const completed=[],failed=[];
- for(const vendor of vendors){onProgress({vendor,completed:[...completed],failed:[...failed],total:vendors.length});try{await read(vendor);completed.push(vendor);}catch(error){failed.push({vendor,message:error.message||String(error)});}}
- return {completed,failed};
+ const completed=[],failed=[],active=new Set();let next=0;
+ const progress=vendor=>onProgress({vendor,active:[...active],completed:[...completed],failed:[...failed],total:vendors.length});
+ const worker=async()=>{while(next<vendors.length){
+  const vendor=vendors[next++];active.add(vendor);progress(vendor);
+  try{await read(vendor);completed.push(vendor);}catch(error){failed.push({vendor,message:error.message||String(error)});}
+  finally{active.delete(vendor);progress(vendor);}
+ }};
+ await Promise.all(Array.from({length:Math.min(2,vendors.length)},worker));
+ return {completed:vendors.filter(v=>completed.includes(v)),failed:failed.sort((a,b)=>vendors.indexOf(a.vendor)-vendors.indexOf(b.vendor))};
 }
 export function clarificationMessage(vendor,rfx,quote,lineId=null){
  const issues=quote?quoteSummary(quote,rfx).issues.filter(i=>lineId==null||i.lineId===lineId):[];

@@ -16,14 +16,16 @@ export const draftResponseFormat={type:'json_schema',name:'rfx_draft',strict:tru
 
 const extractionArray=items=>({type:'array',items});
 const extractionText={type:'string'},extractionNullableText={type:['string','null']};
-const extractedTerm={anyOf:[{type:'null'},draftObject({value:extractionText,source:extractionText})]};
+const extractionLocator={type:'string',description:'Location only, such as page 2, row 12, or Paragraph 7. Put the filename in sourceFile. Do not repeat excerpts or full terms in this field.'};
+const extractionExcerpt={type:'string',description:'Short literal source excerpt supporting this record, including the relevant price/unit or evidence criterion and result. Omit unrelated clauses and long repeated item lists; never paraphrase or invent evidence.'};
+const extractedTerm={anyOf:[{type:'null'},draftObject({value:extractionText,source:extractionLocator})]};
 export const extractionResponseFormat={type:'json_schema',name:'vendor_quote_extraction',strict:true,schema:draftObject({
- quotes:extractionArray(draftObject({lineId:{type:'integer'},price:{...draftNullableNumber,description:'Raw supplier rate for the quoted pricing unit. Never divide pack prices or normalize them to order units.'},currency:{type:'string',enum:['INR','USD']},unit:{...extractionText,description:'Supplier pricing basis including the pack multiplier. In spreadsheets copy Pack / quoted unit, not Order unit.'},state:{type:'string',enum:['read','review']},source:extractionText,excerpt:extractionText,availability:extractionNullableText})),
+ quotes:extractionArray(draftObject({lineId:{type:'integer'},price:{...draftNullableNumber,description:'Raw supplier rate for the quoted pricing unit. Never divide pack prices or normalize them to order units.'},currency:{type:'string',enum:['INR','USD']},unit:{...extractionText,description:'Supplier pricing basis including the pack multiplier. In spreadsheets copy Pack / quoted unit, not Order unit.'},state:{type:'string',enum:['read','review']},source:extractionLocator,excerpt:extractionExcerpt,availability:extractionNullableText})),
  commercialTerms:draftObject({delivery:extractedTerm,payment:extractedTerm,validity:extractedTerm,taxes:extractedTerm}),
- answers:{...extractionArray(draftObject({questionId:extractionText,answer:extractionText,source:extractionText})),description:'Include every explicit supplier questionnaire response in the supplied documents, including the entire Terms worksheet. Do not omit answers because the same fact also appears in commercialTerms or freight. Never invent an absent response.'},
- evidence:extractionArray(draftObject({questionId:extractionText,result:{type:'string',enum:['pass','fail','unknown']},validUntil:extractionNullableText,value:draftNullableNumber,source:extractionText,excerpt:extractionText})),
- freight:draftObject({amount:draftNullableNumber,state:{type:'string',enum:['known','unknown']},source:extractionText}),
- discount:{anyOf:[{type:'null'},draftObject({rate:{type:'number',minimum:0,maximum:1,description:'Fraction of the quoted amount, never percentage points: 5% is 0.05, not 5.'},thresholdReams:{type:'number'},lineIds:extractionArray({type:'integer'}),source:extractionText})]},
+ answers:{...extractionArray(draftObject({questionId:extractionText,answer:extractionText,source:extractionLocator})),description:'Include every explicit supplier questionnaire response in the supplied documents, including the entire Terms worksheet. Do not omit answers because the same fact also appears in commercialTerms or freight. Never invent an absent response.'},
+ evidence:extractionArray(draftObject({questionId:extractionText,result:{type:'string',enum:['pass','fail','unknown']},validUntil:extractionNullableText,value:draftNullableNumber,source:extractionLocator,excerpt:extractionExcerpt})),
+ freight:draftObject({amount:draftNullableNumber,state:{type:'string',enum:['known','unknown']},source:extractionLocator}),
+ discount:{anyOf:[{type:'null'},draftObject({rate:{type:'number',minimum:0,maximum:1,description:'Fraction of the quoted amount, never percentage points: 5% is 0.05, not 5.'},thresholdReams:{type:'number'},lineIds:extractionArray({type:'integer'}),source:extractionLocator})]},
  notes:extractionArray(extractionText),blockers:extractionArray(extractionText)
 })};
 
@@ -67,7 +69,9 @@ export function apiConfig(body,env={}){
  return {url:u.toString().replace(/\/?$/,'/')+'responses',key,model};
 }
 async function modelCall(cfg,input,extra={}){
- try{const r=await fetch(cfg.url,{method:'POST',headers:{'content-type':'application/json',Authorization:'Bearer '+cfg.key,'api-key':cfg.key},body:JSON.stringify({model:cfg.model,instructions,input,store:false,max_output_tokens:16000,...extra}),signal:AbortSignal.timeout(180000)});
+ const payload={model:cfg.model,instructions,input,store:false,max_output_tokens:16000,...extra};
+ if(/^gpt-5(?:[.-]|$)/i.test(cfg.model))payload.text={verbosity:'low',...payload.text};
+ try{const r=await fetch(cfg.url,{method:'POST',headers:{'content-type':'application/json',Authorization:'Bearer '+cfg.key,'api-key':cfg.key},body:JSON.stringify(payload),signal:AbortSignal.timeout(180000)});
  const x=await r.json();if(!r.ok)throw Error(`Model request failed (${r.status}): ${x.error?.message||'Provider error'}`);if(x.status==='incomplete')throw Error('Model output was incomplete; use a smaller package.');return x;}catch(error){if(['TimeoutError','AbortError'].includes(error.name))throw Error('The AI provider did not finish within 3 minutes. Saved results were preserved; retry one supplier.');throw error;}
 }
 const optionProperties={qualityOnly:{type:'boolean'},includeReview:{type:'boolean'},lineIds:{type:'array',items:{type:'integer'}},excludedVendors:{type:'array',items:{type:'string',enum:VENDORS}},fx:{type:'number'}};

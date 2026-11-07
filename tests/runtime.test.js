@@ -25,6 +25,29 @@ test('hosted AI status is non-interactive while local settings remain available'
   assert.match(vm.runInContext('modelStatus()', context), /<button data-action="settings">/);
 });
 
+test('typing batches large workspace writes and pending input is flushed on page exit or explicit save', () => {
+  const timers = new Map(),events = new Map(),writes = [];
+  let next = 0;
+  const context = vm.createContext({
+    state: { data: {} },draftInput: '',askInput: '',clarificationAnswers: {},saveTimer: null,storageWarning: '',
+    setTimeout: fn => { timers.set(++next,fn);return next; },
+    clearTimeout: id => timers.delete(id),
+    window: { addEventListener: (event,fn) => events.set(event,fn) },
+    localStorage: { setItem: (key,value) => writes.push(JSON.parse(value)) },
+  });
+  vm.runInContext(appFunction('save') + appFunction('saveSoon'),context);
+  for (const text of ['B','Buy','Buy paper']) {
+    context.draftInput=text;
+    vm.runInContext('saveSoon()',context);
+  }
+  assert.equal(writes.length,0);assert.equal(timers.size,1);
+  events.get('pagehide')();
+  assert.equal(writes[0].ui.draftInput,'Buy paper');assert.equal(timers.size,0);
+  context.askInput='Which supplier?';
+  vm.runInContext('saveSoon();save();',context);
+  assert.equal(writes[1].ui.askInput,'Which supplier?');assert.equal(timers.size,0);
+});
+
 test('hosted settings entry points cannot open the editor or disconnect managed AI', async () => {
   let notices = 0;
   const context = vm.createContext({
@@ -69,6 +92,8 @@ test('composed Ask page reopens saved answers and handles failures without dropp
   const elements = { '#root': { innerHTML: '' }, '#overlay': { innerHTML: '' }, '#status': { innerHTML: '' } };
   const context = vm.createContext({
     structuredClone,
+    setTimeout,
+    clearTimeout,
     window: { addEventListener() {} },
     document: { querySelector: selector => elements[selector] || null, querySelectorAll: () => [] },
     localStorage: { getItem: () => null, setItem() {} },
