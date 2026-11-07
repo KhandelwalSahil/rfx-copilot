@@ -1,4 +1,4 @@
-import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import {buyerClarifications,clarificationReply,reconcileBuyerClarifications,retainBuyerCommercialAnswers,commercialTrigger} from '../src/domain.js';
+import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import {buyerClarifications,clarificationReply,reconcileBuyerClarifications,retainBuyerCommercialAnswers,retainBuyerQualifications,commercialTrigger} from '../src/domain.js';
 const rfx=JSON.parse(fs.readFileSync(new URL('../dataset/rfx.json',import.meta.url)));
 test('approved buyer answers keep question context without treating suggested numbers in questions as facts',()=>{
  const questions=['What payment terms do you require?','What delivery lead time do you require?'];
@@ -19,6 +19,26 @@ test('complete approved commercial answers retain precise triggers instead of mo
  assert.equal(commercialTrigger(answers[questions[0]]),'PO issuance');
  assert.equal(commercialTrigger('14 days from purchase-order receipt'),'PO receipt');
  assert.equal(retainBuyerCommercialAnswers(draft,clarificationReply(questions,{[questions[1]]:'Standard payment terms'}).message),draft);
+});
+test('independently stated mandatory qualifications stay atomic and survive unrelated buyer answers',()=>{
+ const request='The following qualifications are mandatory:\n- A quality-system certificate valid through 31 March 2028. No specific standard is required.\n- Product test evidence matching all four paper grades, including A4 and A3.\n- Recorded buyer-approved sample evidence covering every offered specification.\n\nPrices remain fixed.';
+ const draft={...structuredClone(rfx),questions:[{id:'umbrella',text:'Provide certificate, product test and recorded buyer-approved sample evidence.',gate:true,rule:{type:'evidence_pass'}},{id:'brand',text:'State offered brands and models',gate:false}]};
+ const result=retainBuyerQualifications(draft,{request,replacement:true});
+ assert.equal(result.questions.filter(q=>q.gate).length,3);assert.equal(result.questions.find(q=>q.rule?.type==='date_on_or_after').rule.date,'2028-03-31');
+ assert.deepEqual(result.questions[0],draft.questions[1]);assert.equal(draft.questions.length,2);
+ const refined=retainBuyerQualifications(draft,{current:result,request:clarificationReply(['What payment terms?'],{'What payment terms?':'Payment within 30 days from valid invoice receipt; no advance.'}).message});
+ assert.deepEqual(refined.questions.filter(q=>q.gate),result.questions.filter(q=>q.gate));
+ const collision=structuredClone(draft);collision.questions[1].id=result.questions[1].id;
+ const repaired=retainBuyerQualifications(collision,{current:result,request:clarificationReply(['What payment terms?'],{'What payment terms?':'30 days from invoice receipt; no advance.'}).message});
+ assert.deepEqual(repaired.questions.filter(q=>q.gate),result.questions.filter(q=>q.gate));
+ assert.equal(new Set(repaired.questions.map(q=>q.id)).size,repaired.questions.length);
+ assert.equal(retainBuyerQualifications(draft,{current:result,request:'Remove the sample qualification.'}),draft);
+ assert.equal(retainBuyerQualifications(draft,{request:request.replace('are mandatory','are optional'),replacement:true}),draft);
+ assert.equal(retainBuyerQualifications(draft,{request:request+'\nAn independent certificate is also mandatory.',replacement:true}),draft);
+ assert.equal(retainBuyerQualifications(draft,{request:request.replace('\nPrices','\n- Independent verification is mandatory.\nPrices'),replacement:true}),draft);
+ const changed=clarificationReply(['What payment terms?'],{'What payment terms?':'Payment within 30 days; sample approval is no longer mandatory.'}).message;
+ assert.equal(retainBuyerQualifications(draft,{current:result,request:changed}),draft);
+ assert.equal(retainBuyerQualifications(draft,{current:result,request:changed+'\n\nAdditional buyer instructions: Remove the certificate.'}),draft);
 });
 test('missing business fields join the same buyer clarification list',()=>{const r={...rfx,deadline:'',fx:null,fxDate:'',buyerClarifications:['What pen tip size is required?']};const q=buyerClarifications(r);assert.equal(q.length,2);assert.match(q[0],/tip size/);assert(q.some(s=>/submit their quotations/.test(s)));assert(!q.some(s=>/exchange rate/.test(s)));});
 test('already-listed quote deadline and FX questions are not duplicated',()=>{const q=buyerClarifications({...rfx,deadline:'',fx:null,fxDate:'',buyerClarifications:['What is the quotation deadline?','Which exchange rate and date should we use?']});assert.equal(q.length,1);});

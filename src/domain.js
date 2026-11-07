@@ -45,6 +45,35 @@ export function prepareDraftGates(draft){
  }
  return {draft:next,repairs};
 }
+export function retainBuyerQualifications(draft,{request,current,replacement=false}){
+ const kinds=text=>[
+  /certificate|quality.system/i.test(text)?'certificate':null,
+  /product\s+test|paper[^.;]{0,60}test|test[^.;]{0,60}(?:paper|grades?)/i.test(text)?'test':null,
+  /(?:buyer.approved|approved|approval|recorded)[^.;]{0,40}sample|sample[^.;]{0,40}(?:approval|evidence)/i.test(text)?'sample':null
+ ].filter(Boolean);
+ let confirmed;
+ if(replacement){
+  const block=String(request).match(/\b(?:following qualifications are mandatory|mandatory qualifications)\s*:\s*\n((?:\s*[-*]\s+[^\n]+(?:\n|$))+)/i);
+  if(block&&/\bcertificat|quality.system|\bsample\b|\btest\s+(?:report|evidence)/i.test(String(request).replace(block[0],'')))return draft;
+  const clauses=block?.[1].split('\n').map(s=>s.replace(/^\s*[-*]\s+/,'').trim()).filter(Boolean);
+  if(clauses?.length===3&&clauses.every(s=>kinds(s).length===1)&&new Set(clauses.flatMap(kinds)).size===3){
+   confirmed=clauses.map((text,i)=>({id:'buyer-qualification-'+(i+1),text:'Provide '+text,gate:true,rule:gateRule({text})}));
+  }
+ }else{
+  if(/Additional buyer instructions:/i.test(request))return draft;
+  const answers=[...String(request).matchAll(/\nBuyer answer: ([\s\S]*?)(?=\n\n\d+\. Question:|$)/g)].map(m=>m[1]);
+  if(answers.some(a=>/\bcertificat|quality.system|\bsample\b|\btest\b|\bqualification|\bgate\b|\bstandard\b/i.test(a)))return draft;
+  const questions=[...String(request).matchAll(/^\d+\. Question: ([^\n]+)\nBuyer answer:/gm)].map(m=>m[1]);
+  const existing=(current?.questions||[]).filter(q=>q.gate&&kinds(q.text).length);
+  if(questions.length&&questions.every(q=>/delivery|lead time|payment|credit|advance/i.test(q))&&existing.length===3&&existing.every(q=>kinds(q.text).length===1)&&new Set(existing.flatMap(q=>kinds(q.text))).size===3)confirmed=clone(existing);
+ }
+ if(!confirmed)return draft;
+ const next=clone(draft);next.questions=next.questions.filter(q=>!q.gate||!kinds(q.text).length);
+ const ids=new Set(confirmed.map(q=>q.id));
+ for(const q of next.questions){const base=q.id;let suffix=1;while(ids.has(q.id))q.id=base+'-'+(++suffix);ids.add(q.id);}
+ next.questions.push(...confirmed);
+ return next;
+}
 export function retainBuyerAllocation(draft,sourceText){
  const sentences=String(sourceText).split(/\n|(?<=;)\s*|(?<=[.!?])\s+/),allocation=s=>/\ballocat(?:e|ion|ions)\b/i.test(s)&&/\d+(?:\.\d+)?\s*%/.test(s),rounding=s=>/\b(?:round(?:ing)?|floor)\b/i.test(s)&&/\b(?:allocat|remainder)/i.test(s);
  const policy=[...new Set(sentences.filter((s,i)=>!s.trim().endsWith('?')&&(allocation(s)||i>0&&allocation(sentences[i-1])&&rounding(s))).map(s=>s.trim()))];
@@ -192,9 +221,9 @@ export function supplierOfferStatus(data,rfx,vendor){
  const bid=comparison(data,rfx).find(c=>c.vendor===vendor),s=quoteSummary(x,rfx),readable=reasons=>reasons.map(reason=>{for(const q of rfx.questions)reason=reason.split(q.id+':').join(q.text+':');return reason;});
  if(bid?.total!=null)return {code:'ready',label:'Comparable',tone:'',ready:true,reasons:[]};
  if(x.meta?.rfxSignature&&x.meta.rfxSignature!==rfxSourceSignature(rfx))return {code:'stale',label:'Previous RFQ version',tone:'warn',ready:false,reasons:['This extracted offer is for an earlier requirement.']};
+ if(s.redFlags.length)return {code:'conflict',label:'Requirement not met',tone:'bad',ready:false,reasons:[...s.redFlags.map(f=>f.detail),...(s.internalReviews.length?[s.internalReviews.length+' prices also need internal source verification.']:[]),...(s.quality.status!=='pass'?readable(s.quality.reasons):[])]};
  if(s.internalReviews.length)return {code:'extraction',label:'Source review pending',tone:'warn',ready:false,reasons:[s.internalReviews.length+' prices need internal source verification. No supplier clarification is required for this check.']};
  if(s.quality.status!=='pass')return {code:'evidence',label:s.quality.status==='fail'?'Documents do not meet requirements':'Required documents missing',tone:s.quality.status==='fail'?'bad':'warn',ready:false,reasons:readable(s.quality.reasons)};
- if(s.redFlags.length)return {code:'conflict',label:'Requirement not met',tone:'bad',ready:false,reasons:s.redFlags.map(f=>f.detail)};
  if(s.items.some(l=>l.why==='Valid FX assumption required'))return {code:'evaluation',label:'Exchange rate needed',tone:'warn',ready:false,reasons:['Add a buyer-approved, dated INR-per-USD rate in Compare & Ask. No supplier clarification is needed for currency conversion.']};
  return {code:'incomplete',label:'Offer incomplete',tone:'warn',ready:false,reasons:s.issues.length?s.issues.map(i=>i.title+': '+i.detail):bid?.reasons||['The offer is not ready for full-scope comparison.']};
 }
