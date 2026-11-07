@@ -313,6 +313,7 @@ function threadDisplayText(message){
 const bindScenario=bind;
 bind=function(){bindScenario();document.querySelectorAll('[data-comparable-only]').forEach(b=>b.onchange=()=>{comparableOnly=b.checked;render();});document.querySelectorAll('[data-inbox-jump]').forEach(b=>b.onclick=()=>{inboxVendor=b.dataset.inboxJump;view='inbox';render();});document.querySelectorAll('[data-supplier-query]').forEach(b=>b.onclick=()=>supplierQueryDialog(b.dataset.supplierQuery));};
 function supplierQueryDialog(v){
+ if(busy)return notify('Please wait for the current operation to finish before asking a supplier.');
  if(!state.sent||!activeVendorNames().includes(v))return notify('Send the RFQ before asking a supplier a question.');
  $('#overlay').innerHTML=`<div class="modal"><article><div class="row between"><h2>Ask ${esc(v)}</h2><button data-close>Cancel</button></div><input id="supplierQueryVendor" type="hidden" value="${esc(v)}"><label for="supplierQueryText">Message to supplier</label><textarea id="supplierQueryText" rows="7" maxlength="6000" placeholder="Type a question or share a note...">${esc(state.supplierQueryDrafts?.[v]||'')}</textarea><p class="muted">This query stays in the supplier conversation. It does not send external email, generate an automatic reply, or change the current quote.</p><button class="primary" data-action="sendSupplierQuery" ${busy?'disabled':''}>Send query</button><div id="inlineError" role="alert"></div></article></div>`;
  bindOverlay();$('#supplierQueryText').focus();

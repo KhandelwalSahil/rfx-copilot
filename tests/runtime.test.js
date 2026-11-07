@@ -25,6 +25,13 @@ test('hosted AI status is non-interactive while local settings remain available'
   context.serverAiDefault = false;
   assert.match(vm.runInContext('modelStatus()', context), /<button data-action="settings">/);
 });
+test('a supplier query cannot open a permanently disabled composer during another operation',()=>{
+ const flow=readFileSync(new URL('../src/flow.js',import.meta.url),'utf8');
+ const code=flow.slice(flow.indexOf('function supplierQueryDialog('),flow.indexOf('\nasync function receiveSupplierReplies('));
+ const notices=[],context=vm.createContext({busy:true,notify:message=>notices.push(message)});
+ vm.runInContext(code,context);vm.runInContext("supplierQueryDialog('Rajan')",context);
+ assert.match(notices[0],/wait for the current operation/);
+});
 test('real New RFx lifecycle and legacy recovery support extraction failures and successful retry',async()=>{
  const html=await (await worker.fetch(new Request('https://rfx.test/'))).text(),script=html.match(/<script type="module">([\s\S]*?)<\/script>/)[1];
  const elements={'#root':{innerHTML:''},'#overlay':{innerHTML:''},'#status':{innerHTML:''}};
