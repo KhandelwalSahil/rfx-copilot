@@ -127,9 +127,10 @@ function sevenAnswer(rfx,q,vendor,index,round,f,rows,terms){
  if(/validity|valid until|fixed prices/.test(t))return terms.validity;
  if(/brand|model|specification|pack size/.test(t))return rfx.lines.map(l=>{
   const row=rows.find(r=>r.id===l.id);if(!row)return 'Line '+l.id+' ('+l.name+'): NOT QUOTED.';
-  return 'Line '+l.id+' ('+l.name+'): offered brand '+vendor+', model '+(index===3&&l.id===rfx.lines[0].id&&!f.specs?'NOT PROVIDED':vendor.toUpperCase().replace(/\W/g,'')+'-L'+l.id)+'; specification '+l.spec+'; pricing unit '+row.unit+'. No specification deviation.';
+  const hp=/genuine|OEM/i.test(l.name+' '+l.spec)&&(l.name+' '+l.spec).match(/\bHP\s*(12A|88A|05A)\b/i);
+  return 'Line '+l.id+' ('+l.name+'): offered brand '+(hp?'HP':vendor)+', model '+(index===3&&l.id===rfx.lines[0].id&&!f.specs?'NOT PROVIDED':hp?hp[1].toUpperCase():vendor.toUpperCase().replace(/\W/g,'')+'-L'+l.id)+'; specification '+l.spec+'; pricing unit '+row.unit+'. No specification deviation.';
  }).join('\n');
- if(/commercial|exception|terms|conditions/.test(t))return terms.delivery+' '+terms.payment+' '+terms.validity+' '+(terms.freight==null?'Freight not confirmed.':'Fixed freight '+terms.freight+' INR for all awarded items at Delhi, Bengaluru and Pune; no location surcharge.')+' Prices exclude GST, shown separately. No MOQ or guaranteed annual purchase volume is required. Damaged or nonconforming goods are replaced within 7 calendar days at no additional cost. Exceptions are stated above.';
+ if(/commercial|exception|terms|conditions/.test(t))return terms.delivery+' '+terms.payment+' '+terms.validity+' '+(terms.freight==null?'Freight not confirmed.':'Fixed freight '+terms.freight+' INR for all awarded items at '+(index===4?'Delhi and Bengaluru only; Pune is not served.':'Delhi, Bengaluru and Pune; no location surcharge.'))+' Prices exclude GST, shown separately. No MOQ or guaranteed annual purchase volume is required. Damaged or nonconforming goods are replaced within 7 calendar days of notification at no additional cost. Exceptions are stated above.';
  if(/capacity/.test(t))return 'Monthly paper supply capacity 20,000 reams. Forecast call-off capacity confirmed for requested paper grades.';
  if(/replacement|returns/.test(t))return 'We replace damaged or nonconforming supplied items within 7 calendar days of notification at no additional charge.';
  if(/subcontract/.test(t))return 'No subcontracted fulfilment proposed.';
@@ -173,8 +174,8 @@ const supplierCatalog=[{"id":1,"name":"A4 paper 75 GSM","unit":"ream","price":27
 export function sourceProfileV3(rfx){return rfx.responseProfile==='supplier-v3'||rfx.scenarioId==='seven-supplier-2027';}
 export function supplierResponseStatus(rfx,vendor){return sourceProfileV3(rfx)&&vendor==='NorthStar'?'awaiting':null;}
 const sourceUnit=s=>String(s).toLowerCase().replace(/^(?:pcs?|pieces?)$/,'piece').replace(/boxes$/,'box').replace(/(ream|pack|roll|can|cartridge|pad)s$/,'$1');
-export function supplierCatalogEntry(line){const name=line.name.toLowerCase();return supplierCatalog.find(c=>sourceUnit(c.unit)===sourceUnit(line.unit)&&(c.name.toLowerCase().match(/[a-z]+|[0-9]+/g)||[]).every(w=>name.includes(w)))||null;}
+export function supplierCatalogEntry(line){const name=(line.name+' '+(line.spec||'')).toLowerCase();return supplierCatalog.find(c=>sourceUnit(c.unit)===sourceUnit(line.unit)&&(c.name.toLowerCase().match(/[a-z]+|[0-9]+/g)||[]).every(w=>name.includes(w)))||null;}
 
 const annualSource=rfx=>/annual|yearly|monthly (?:PO|purchase.order|call.off)|contract period/i.test(rfx.scope+' '+rfx.terms);
 const sourceFreight=(rfx,index)=>annualSource(rfx)?120000+index*35000:1200+index*350;
-function sourceValidity(rfx){const v=String(rfx.terms).match(/quot(?:e|ation)[^.;\n]*?valid(?:ity)?[^.;\n]*?(?:through|until)\s+([^.;\n]+)/i),period=String(rfx.scope+' '+rfx.terms).match(/\d{1,2}\s+[A-Za-z]+\s+\d{4}\s*(?:to|through|[-–—])\s*\d{1,2}\s+[A-Za-z]+\s+\d{4}/i);return 'Quotation valid through '+(v?v[1]:rfx.deadline)+'. Prices fixed in the quoted currency '+(period?'for '+period[0]:'for the requested contract or order period')+'. We accept that price period.';}
+function sourceValidity(rfx){const v=String(rfx.terms).match(/(?:quot(?:e|ation)|offers?|bids?)[^.;\n]*?valid(?:ity)?[^.;\n]*?(?:through|until)\s+([^.;\n]+)/i),period=String(rfx.scope+' '+rfx.terms).match(/\d{1,2}\s+[A-Za-z]+\s+\d{4}\s*(?:to|through|[-–—])\s*\d{1,2}\s+[A-Za-z]+\s+\d{4}/i);return 'Quotation valid through '+(v?v[1]:rfx.deadline)+'. Prices fixed in the quoted currency '+(period?'for '+period[0]:'for the requested contract or order period')+'. We accept that price period.';}

@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';
-import {normalize,quality,validateExtraction,validateRfx,reviewQueue,correctQuote,recoverState,draftDiff,rfxReadiness,analyzeAward,runTool,invalidateState,freezeDecision,awardReadiness} from '../src/domain.js';
+import {normalize,quality,validateExtraction,validateRfx,reviewQueue,correctQuote,recoverState,draftDiff,rfxReadiness,analyzeAward,runTool,invalidateState,freezeDecision,awardReadiness,gateRule,prepareDraftGates,normalizeDraftText,retainBuyerAllocation} from '../src/domain.js';
 const rfx=JSON.parse(fs.readFileSync(new URL('../dataset/rfx.json',import.meta.url)));
 function vendor(p=10){return {blockers:[],quotes:rfx.lines.map(l=>({lineId:l.id,price:p,currency:'INR',unit:l.unit,state:'read',source:'test.pdf page 1',excerpt:'Literal test quote'})),answers:[],evidence:rfx.questions.filter(q=>q.gate).map(q=>({questionId:q.id,result:'pass',validUntil:'2028-12-31',source:'test.pdf page 1',excerpt:'Literal evidence'})),freight:{amount:0,state:'known',source:'test.pdf included'},meta:{model:'test-only model',responseId:'test-only response',rfxSignature:JSON.stringify(rfx),files:[{name:'test.pdf',sha256:'a'.repeat(64)}]}};}
 const state=()=>({schemaVersion:2,rfx:structuredClone(rfx),data:Object.fromEntries(['Metro','Bharat','Jaipur Paper','Rajan','QuickDesk'].map(v=>[v,vendor()])),audit:[],version:1,approved:false,decision:null,decisionHistory:[],chat:[],draftChat:[]});
@@ -16,6 +16,48 @@ test('sourced unit correction resolves unknown basis and preserves audit old val
 test('new missing-line quote requires valid evidence and unit',()=>{let data={Metro:vendor()};data.Metro.quotes=data.Metro.quotes.slice(1);correctQuote(data,rfx,{vendor:'Metro',lineId:1,price:250,unit:'ream',currency:'INR',source:'new.pdf page 1',reason:'Supplier added omitted line'});assert.equal(data.Metro.quotes.length,30);});
 test('changed expiry rule changes quality outcome',()=>{const r=structuredClone(rfx);r.questions[0].text='Quality certificate valid through 31 Mar 2030';r.questions[0].rule.date='2030-03-31';assert.equal(quality(vendor(),r).status,'fail');});
 test('wording and structured gate conflict cannot pass',()=>{const r=structuredClone(rfx);r.questions[0].text='Valid through 31 Mar 2030';assert.equal(quality(vendor(),r).status,'unknown');assert.throws(()=>validateRfx(r),/Invalid gate/);});
+test('contract scope dates do not turn sample and paper evidence into expiry gates',()=>{
+ const r=structuredClone(rfx);r.questions=[
+  {id:'paper',text:'Product test evidence for all four paper grades for 1 April 2027 to 31 March 2028.',gate:true,rule:{type:'evidence_pass'}},
+  {id:'sample',text:'Recorded approved samples covering every offered specification for 2027-04-01 to 2028-03-31.',gate:true,rule:{type:'evidence_pass'}},
+  {id:'certificate',text:'For the contract beginning 1 April 2027, supply a certificate valid through 31 March 2028.',gate:true,rule:{type:'date_on_or_after',date:'2028-03-31'}}
+ ];
+ assert.doesNotThrow(()=>validateRfx(r));assert.equal(gateRule(r.questions[2]).date,'2028-03-31');
+ r.questions[2].text='Certificate valid through 31 March 2028 for the contract starting 2027-04-01.';
+ assert.equal(gateRule(r.questions[2]).date,'2028-03-31');
+});
+test('common explicit expiry wordings still reject a conflicting structured deadline',()=>{
+ for(const text of ['Certificate expires on 31 March 2030.','Certificate expiry date: 31 March 2030.','Certificate valid to 31 March 2030.','Certificate valid till 31 March 2030.']){
+  assert.equal(gateRule({text,gate:true,rule:{type:'date_on_or_after',date:'2028-03-31'}}).type,'invalid');
+ }
+});
+test('draft gate repairs only represent explicit validity deadlines and retain real conflicts',()=>{
+ const r=structuredClone(rfx);r.questions=[
+  {id:'cert',text:'Certificate valid through 31 March 2028.',gate:true,rule:{type:'evidence_pass'}},
+  {id:'test',text:'Paper evidence covering the 2027-04-01 to 2028-03-31 contract.',gate:true,rule:null}
+ ];
+ const before=structuredClone(r),result=prepareDraftGates(r);
+ assert.deepEqual(r,before);assert.deepEqual(result.draft.questions[0].rule,{type:'date_on_or_after',date:'2028-03-31'});
+ assert.deepEqual(result.draft.questions[1].rule,{type:'evidence_pass'});assert.equal(result.repairs.length,2);
+ r.questions[0].rule={type:'date_on_or_after',date:'2030-03-31'};
+ assert.throws(()=>validateRfx(prepareDraftGates(r).draft),/conflict/);
+});
+test('known attributes inside item names populate empty spec without inventing missing details',()=>{
+ const draft={...structuredClone(rfx),lines:['Blue refillable whiteboard markers','A4 two-ring binders','A4 polypropylene document folders','Eight-inch stainless-steel scissors','A4 paper','Blue pens'].map((name,i)=>({id:i+1,name,spec:'',quantity:10,unit:'piece'}))};
+ const result=normalizeDraftText(draft);
+ assert.deepEqual(result.draft.lines.map(l=>l.spec),['Blue, refillable','A4, two-ring','A4, polypropylene','Eight-inch, stainless-steel','','']);
+ assert(draft.lines.every(l=>l.spec===''));assert.equal(result.repairs.length,4);
+});
+test('explicit buyer location allocation and rounding survive model omission or wrong percentages',()=>{
+ const policy='For each item, allocate approximately 40% to Delhi, 35% to Bengaluru and 25% to Pune. Round Delhi and Bengaluru allocations down and assign the remainder to Pune.';
+ const draft=structuredClone(rfx);draft.scope='Office supplies.';draft.terms='Payment within 30 days. Allocate 50% to Delhi and 50% to Pune. Round Delhi down and assign the remainder to Pune. Fixed freight once.';
+ const repaired=retainBuyerAllocation(draft,policy);
+ assert(repaired.terms.includes(policy.replace('. Round','.\nRound')));assert.doesNotMatch(repaired.terms,/50%/);
+ assert.match(repaired.terms,/Payment within 30 days/);assert.match(repaired.terms,/Fixed freight once/);assert.match(draft.terms,/50%/);
+ const changed=retainBuyerAllocation(repaired,'Allocate 50% to Delhi and 50% to Bengaluru.');
+ assert.doesNotMatch(changed.terms,/40%|35%|25%|remainder to Pune/);assert.match(changed.terms,/50%/);
+ assert.equal(retainBuyerAllocation(draft,'Please recommend an allocation policy?'),draft);
+});
 test('invalid calendar date cannot clear a certificate gate',()=>{const x=vendor();x.evidence[0].validUntil='2028-02-30';assert.equal(quality(x,rfx).status,'unknown');});
 test('numeric gates use observed evidence, not a Yes flag',()=>{const r=structuredClone(rfx);r.questions.push({id:'Q13',text:'Capacity at least 20000 reams',gate:true,rule:{type:'number_at_least',minimum:20000}});const x=vendor();x.evidence.push({questionId:'Q13',result:'pass',value:18000,source:'test.pdf page 1',excerpt:'Capacity 18000'});assert.equal(quality(x,r).status,'fail');});
 test('blank RFx can be drafted but not sent',()=>{const r={title:'',scope:'',deadline:'',currency:'INR',fx:null,fxDate:'',terms:'',lines:[],questions:[]};assert.doesNotThrow(()=>validateRfx(r,{partial:true}));assert.equal(rfxReadiness(r).ready,false);assert.throws(()=>validateRfx(r),/1–100 line/);});

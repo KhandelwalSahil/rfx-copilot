@@ -171,7 +171,7 @@ action=async function(a){
  const candidates=extractionCandidates(evaluatedVendors(state.rfx),state.packages,state.data,state.rfx);
  if(!candidates.length)return notify('All available current replies are already extracted.');
  if(!config.allowLive)return settings();
- return task('Extracting available supplier replies…',async()=>{bulkExtracting=true;try{const result=await extractAvailable(candidates,v=>extract(v),p=>{$('#status').innerHTML=`<div class="busy">${p.active.length?'Reading '+esc(p.active.join(', ')):'Finishing'} · ${p.completed.length} completed · ${p.failed.length} not extracted</div>`;});save();notify(result.completed.length+' extracted'+(result.failed.length?' · '+result.failed.length+' not extracted':''));}finally{bulkExtracting=false;render();}});
+ return task('Extracting available supplier replies…',async()=>{bulkExtracting=true;try{await extractAvailable(candidates,v=>extract(v),p=>setTaskProgress((p.active.length?'Reading '+p.active.join(', '):'Finishing')+' · '+p.completed.length+' completed · '+p.failed.length+' need retry'));save();}finally{bulkExtracting=false;render();}});
  }
  if(a==='setEvaluationFx')return evaluationFxDialog();
  if(a==='saveEvaluationFx'){
@@ -220,6 +220,7 @@ const oldExtract=extract;
 let bulkExtracting=false;
 state.extractionJobs||={};for(const job of Object.values(state.extractionJobs))if(job.status==='reading'){job.status='failed';job.message='The previous extraction was interrupted.';}
 extract=async function(v){
+ state.extractionJobs||={};
  if(state.extractionJobs[v]?.status==='reading')throw Error('This supplier extraction is already in progress.');
  state.extractionJobs[v]={status:'reading',stage:'Preparing supplier files',at:new Date().toISOString()};save();render();
  try{
@@ -278,13 +279,18 @@ function evaluationDialog(v,fromOverview=false){
 const priorEvaluationOverlay=bindOverlay;
 bindOverlay=function(){priorEvaluationOverlay();document.querySelectorAll('#overlay [data-evaluation]').forEach(b=>b.onclick=()=>evaluationDialog(b.dataset.evaluation));document.querySelectorAll('[data-cancel-exclusion]').forEach(b=>b.onclick=()=>vendorInspector(b.dataset.cancelExclusion));document.querySelectorAll('[data-confirm-exclusion]').forEach(b=>b.onclick=()=>{try{if(busy)return;setVendorEvaluation(state,b.dataset.confirmExclusion,{exclude:true,reason:$('#evaluationReason').value});save();render();if(b.dataset.overview==='true')$('#overlay').innerHTML='';else vendorInspector(b.dataset.confirmExclusion);}catch(e){inlineError(e);}});};
 
-function lockMutations(){document.querySelectorAll('#root [data-action],#root [data-extract],#root input[type="file"],#root [data-vendor-select],#root [data-buyer-answer]').forEach(b=>{if(b.dataset.action&&!['draft','send','applyDraft','discardDraft','confirm-blank','blank','extractAll','refreshInbox','sendSupplierMessage','sendClarification','freeze','updateClarifications','continueToVendors','addVendorQuestion'].includes(b.dataset.action))return;b.disabled=true;});}
+function lockMutations(){document.querySelectorAll('#root [data-action],#root [data-extract],#root input[type="file"],#root [data-vendor-select],#root [data-buyer-answer],#root [data-use-buyer-suggestion]').forEach(b=>{if(b.dataset.action&&!['draft','suggestClarifications','send','applyDraft','discardDraft','confirm-blank','blank','extractAll','refreshInbox','sendSupplierMessage','sendClarification','freeze','updateClarifications','continueToVendors','addVendorQuestion'].includes(b.dataset.action))return;b.disabled=true;});}
 function responseNextStep(){
  const count=activeVendorNames().filter(v=>state.data[v]).length;
  if(!count)return '';
  return `<section class="response-next-step" aria-label="Continue to supplier comparison"><div><h2>Compare supplier offers</h2><p>${count} quote${count===1?' is':'s are'} extracted. Compare prices and terms, or ask a question about the offers.</p></div><button class="primary" data-nav="compare">Compare & Ask <span aria-hidden="true">→</span></button></section>`;
 }
-function responseProgress(){return '';}
+function responseProgress(){
+ if(!state.sent)return '';
+ const jobs=participatingVendors(state.rfx).filter(v=>state.packages[v]?.signature===rfxSourceSignature(state.rfx)&&['reading','failed'].includes(state.extractionJobs?.[v]?.status));
+ if(!jobs.length)return '';
+ return `<section class="card" aria-label="Supplier extraction progress"><h3>${jobs.some(v=>state.extractionJobs[v].status==='reading')?'Reading supplier replies':'Some replies need another look'}</h3>${jobs.map(v=>{const job=state.extractionJobs[v];return `<div class="row between"><p><b>${esc(v)}</b> · ${esc(job.status==='reading'?job.stage:buyerError(job.message))}</p>${job.status==='failed'?`<button data-extract="${esc(v)}" ${busy?'disabled':''}>Retry extraction</button>`:tag('Reading','warn')}</div>`;}).join('')}<p class="muted sr">Completed quotes stay saved. Only successfully read, source-backed offers enter the comparison.</p></section>`;
+}
 
 function evaluationNotice(){
  const usd=Object.values(state.data).some(x=>x.quotes?.some(q=>q.currency==='USD')),missing=usd&&(!Number.isFinite(state.rfx.fx)||state.rfx.fx<=0||!state.rfx.fxDate);

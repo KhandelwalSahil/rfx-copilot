@@ -15,9 +15,14 @@ function dateInText(text) {
   const m = String(text).match(/\b(\d{1,2})\s+(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+(\d{4})\b/i);
   return m ? isoDate(`${m[3]}-${String(months.indexOf(m[2].slice(0,3).toLowerCase())+1).padStart(2,'0')}-${m[1].padStart(2,'0')}`) : null;
 }
+function gateValidityDate(text){
+ const clause=String(text).match(/\b(?:valid(?:ity)?[^.;\n]{0,60}?\b(?:through|until|till|up ?to|as of|ending)|valid(?:ity)?\s+(?:on or after|on|to)|(?:expiry|expiration|expires?)(?:\s+(?:date(?:\s+is)?|on or after|not before|no earlier than|later than|on|is))?)\s*:?\s*([^.;\n]{1,80})/i);
+ const date=clause?.[1].match(/^\s*(\d{4}-\d{2}-\d{2}|\d{1,2}\s+[A-Za-z]+\s+\d{4})\b/);
+ return date?dateInText(date[1]):null;
+}
 export function gateRule(question) {
   const explicit = question.rule;
-  const textDate = dateInText(question.text);
+  const textDate = gateValidityDate(question.text);
   if (explicit?.type === 'date_on_or_after') {
     if (!isoDate(explicit.date) || (textDate && textDate !== explicit.date)) return {type:'invalid', reason:'Question text and structured date rule conflict'};
     return explicit;
@@ -27,6 +32,54 @@ export function gateRule(question) {
   if (explicit) return {type:'invalid',reason:'Unsupported quality rule'};
   // Legacy records derive dates from the question, never a hardcoded question ID.
   return textDate ? {type:'date_on_or_after',date:textDate} : {type:'evidence_pass'};
+}
+export function prepareDraftGates(draft){
+ const next=clone(draft),repairs=[];
+ for(const q of next.questions){
+  if(!q.gate)continue;
+  const date=gateValidityDate(q.text);
+  if(!q.rule||q.rule.type==='evidence_pass'&&date){
+   const before=q.rule??null;q.rule=date?{type:'date_on_or_after',date}:{type:'evidence_pass'};
+   repairs.push({questionId:q.id,before,after:clone(q.rule)});
+  }
+ }
+ return {draft:next,repairs};
+}
+export function retainBuyerAllocation(draft,sourceText){
+ const sentences=String(sourceText).split(/\n|(?<=;)\s*|(?<=[.!?])\s+/),allocation=s=>/\ballocat(?:e|ion|ions)\b/i.test(s)&&/\d+(?:\.\d+)?\s*%/.test(s),rounding=s=>/\b(?:round(?:ing)?|floor)\b/i.test(s)&&/\b(?:allocat|remainder)/i.test(s);
+ const policy=[...new Set(sentences.filter((s,i)=>!s.trim().endsWith('?')&&(allocation(s)||i>0&&allocation(sentences[i-1])&&rounding(s))).map(s=>s.trim()))];
+ if(!policy.length||policy.every(s=>(draft.scope+'\n'+draft.terms).includes(s)))return draft;
+ const next=clone(draft);
+ for(const field of ['scope','terms']){
+  const parts=String(next[field]||'').split(/\n|(?<=;)\s*|(?<=[.!?])\s+/);
+  next[field]=parts.filter((s,i)=>!allocation(s)&&!(i>0&&allocation(parts[i-1])&&rounding(s))).join(' ');
+ }
+ next.terms=[next.terms,...policy].filter(Boolean).join('\n');
+ return next;
+}
+export function retainBuyerCommercialAnswers(draft,message){
+ let next=draft;
+ for(const match of String(message).matchAll(/^\d+\. Question: ([^\n]+)\nBuyer answer: ([\s\S]*?)(?=\n\n\d+\. Question:|\n\nAdditional buyer instructions:|$)/gm)){
+  const question=match[1],answer=match[2].trim(),kind=/payment|credit period|advance/i.test(question)?'Payment':/delivery|lead time/i.test(question)?'Delivery':null,trigger=commercialTrigger(answer);
+  if(!kind||!/\d+\s*(?:calendar\s+|working\s+|business\s+)?days/i.test(answer)||!trigger||['PO','invoice'].includes(trigger)||kind==='Payment'&&!/advance/i.test(answer))continue;
+  if((next.scope+'\n'+next.terms).includes(answer))continue;
+  next=clone(next);
+  for(const field of ['scope','terms'])next[field]=String(next[field]||'').split(/\n|(?<=;)\s*|(?<=[.!?])\s+/).filter(s=>{
+   if(kind==='Payment')return !(/^\s*(?:payment|payable|credit|no advance|without advance)\b/i.test(s)&&/\d+\s*(?:calendar\s+)?days|\bnet\s*\d+|advance/i.test(s));
+   return !(/^\s*(?:deliver(?:y|ed)?|lead time|required delivery)\b/i.test(s)&&/\d+\s*(?:calendar\s+|working\s+|business\s+)?days/i.test(s)&&!/replac|damaged|nonconform/i.test(s));
+  }).join(' ');
+  next.terms+='\n'+kind+' terms: '+answer;
+ }
+ return next;
+}
+export function validateClarificationSuggestions(suggestions,questions){
+ if(!Array.isArray(suggestions)||suggestions.length!==questions.length)throw Error('AI must suggest one answer for each current buyer question. Please retry.');
+ const seen=new Set();
+ for(const s of suggestions){
+  if(!s||!questions.includes(s.question)||seen.has(s.question)||typeof s.answer!=='string'||!s.answer.trim()||s.answer.length>2000||typeof s.rationale!=='string'||!s.rationale.trim()||s.rationale.length>1000)throw Error('AI returned an invalid or mismatched buyer-answer suggestion. Please retry.');
+  seen.add(s.question);
+ }
+ return suggestions;
 }
 export function validateRfx(rfx, {partial=false,phase='send'}={}) {
   if (!rfx || !Array.isArray(rfx.lines) || !Array.isArray(rfx.questions)) throw Error('RFx requires lines and questionnaire arrays');
@@ -447,18 +500,26 @@ export function normalizeDraftText(draft){
   };
   const field=(obj,key,path)=>{if(typeof obj[key]!=='string'){const before=obj[key]??null;obj[key]=text(obj[key]);repairs.push({path,before,after:obj[key]});}};
   for(const key of ['title','scope','terms','deadline','currency','fxDate','fxNote'])field(next,key,key);
-  next.lines.forEach((l,i)=>{if(!l||typeof l!=='object'||Array.isArray(l))throw Error('Draft line '+(i+1)+' must be an object');field(l,'spec','Line '+(i+1)+' specification');});
+  next.lines.forEach((l,i)=>{
+   if(!l||typeof l!=='object'||Array.isArray(l))throw Error('Draft line '+(i+1)+' must be an object');
+   field(l,'spec','Line '+(i+1)+' specification');
+   if(!l.spec.trim()&&!hasUnresolvedContent(l.name)){
+    const attributes=[...new Set(String(l.name).match(/\b(?:A[0-6]|(?:\d+(?:\.\d+)?|one|two|three|four|five|six|seven|eight|nine|ten)[ -]*(?:rings?|inch(?:es)?|mm|cm|GSM|ml|litres?)|blue|black|white|refillable|polypropylene|stainless[ -]+steel)\b/gi)||[])];
+    if(attributes.length>=2&&attributes.some(a=>/refillable|rings?|polypropylene|stainless/i.test(a))){l.spec=attributes.join(', ');repairs.push({path:'Line '+(i+1)+' specification',before:'',after:l.spec});}
+   }
+  });
   return {draft:next,repairs};
 }
 
 // Validate proposed buyer questions against stated facts; do not use vendor answers as buyer requirements.
 export function reconcileBuyerClarifications(draft,{questions=draft.buyerClarifications||[],review=[],confirmedText=''}={}){
- const facts=String(confirmedText).split(/\n|(?<=[.!?])\s+/).filter(s=>!/^\s*(?:what|which|should|can you|could you|please confirm)\b/i.test(s)&&!s.trim().endsWith('?')).join('\n');
+ const answerContext=String(confirmedText).replace(/(^|\n)\d+\. Question: ([^\n]+)\nBuyer answer: /g,(_,start,question)=>start+(/payment|credit period|advance/i.test(question)?'Payment terms: ':/delivery|lead time/i.test(question)?'Delivery terms: ':'Buyer answer: '));
+ const facts=answerContext.split(/\n|(?<=[.!?])\s+/).filter(s=>!/^\s*(?:what|which|should|can you|could you|please confirm)\b/i.test(s)&&!s.trim().endsWith('?')).join('\n');
  const topic=q=>/payment|credit period|advance payment/i.test(q)?'payment':/allocation|rounding|40%|35%|25%/i.test(q)?'allocation':/seven|7 suppliers|single.supplier|split award|invite.*suppliers/i.test(q)?'awardPolicy':/freight|location surcharge/i.test(q)?'freight':/currency|quoted currency|GST/i.test(q)?'currency':/submission|deadline|quotation validity|offers.*valid|time zone/i.test(q)?'deadline':/sample.*(?:evidence|approval)|buyer.approved sample/i.test(q)?'sampleEvidence':/test evidence|paper.*(?:grades|test)|A4 and A3/i.test(q)?'paperEvidence':/quality.system|certificate.*standard|certification standard/i.test(q)?'qualityCertificate':/brand|models|deviations/i.test(q)?'offeredProducts':/delivery.*(?:lead|time|period|days|commit)|lead time/i.test(q)?'delivery':/tip size|ink type|page count|specification/i.test(q)?'specification':'other';
  const paymentDays=/(?:payment|credit|payable)[^.\n]{0,65}\b\d+\s*(?:calendar\s+)?days|\bnet\s*\d+/i.test(facts),paymentTrigger=/(?:invoice|delivery|acceptance)[^.\n]{0,30}(?:receipt|date)|(?:receipt|date)[^.\n]{0,30}(?:invoice|delivery|acceptance)/i.test(facts),advancePolicy=/(?:no|without)\s+(?:any\s+)?advance|advance[^.\n]{0,35}(?:not acceptable|not allowed|permitted|acceptable|required)|\d+\s*%[^.\n]{0,20}advance/i.test(facts);
- const deliveryDays=/deliver(?:y|ed)?[^.\n]{0,100}\b\d+\s*(?:calendar\s+|working\s+|business\s+)?days/i.test(facts),deliveryTrigger=/(?:from|after|of|following)[^.\n]{0,35}(?:PO|purchase order|award|order issuance)/i.test(facts);
+ const deliveryDays=/deliver(?:y|ed)?[^.\n]{0,100}\b\d+\s*(?:calendar\s+|working\s+|business\s+)?days/i.test(facts),deliveryTrigger=/(?:from|after|of|following)[^.\n]{0,35}(?:PO|purchase[ -]order|award|order issuance)/i.test(facts);
  const confirmed={payment:paymentDays&&paymentTrigger&&advancePolicy,delivery:deliveryDays&&deliveryTrigger,
- allocation:/40\s*%[\s\S]{0,100}35\s*%[\s\S]{0,100}25\s*%/i.test(facts)&&/rounding[\s\S]{0,80}Pune/i.test(facts),
+ allocation:/40\s*%[\s\S]{0,100}35\s*%[\s\S]{0,100}25\s*%/i.test(facts)&&/(?:round(?:ing)?|floor)[\s\S]{0,180}Pune/i.test(facts),
  awardPolicy:/(?:seven|7)\s+suppliers/i.test(facts)&&/single.supplier[\s\S]{0,60}split/i.test(facts),
  freight:/fixed annual (?:freight )?charge|freight[\s\S]{0,80}fixed annual/i.test(facts)&&/all three locations/i.test(facts)&&/without[^.\n]{0,40}(?:surcharges|charges)|no[^.\n]{0,40}location surcharges/i.test(facts),
  currency:/INR\s*(?:or|and|\/)\s*USD/i.test(facts)&&/GST[^.\n]{0,35}separat/i.test(facts)&&/fixed[^.\n]{0,70}(?:currency|contract)|prices[^.\n]{0,40}fixed/i.test(facts),
@@ -764,7 +825,7 @@ export function commercialTrigger(value){
   }
   return invoice;
  }
- if(/\bPO\b|purchase order/i.test(s)){if(/recei(?:pt|ved)[^.;]{0,45}(?:purchase order|\bPO\b)|(?:purchase order|\bPO\b)[^.;]{0,35}recei(?:pt|ved)/i.test(s))return 'PO receipt';if(/(?:issu(?:e|ed|ance)|creat(?:ion|ed)|plac(?:ement|ed)|releas(?:e|ed))[^.;]{0,55}(?:purchase order|\bPO\b)|(?:purchase order|\bPO\b)[^.;]{0,35}(?:issu|creat|plac|releas)/i.test(s))return 'PO issuance';return 'PO';}
+ if(/\bPO\b|purchase[ -]order/i.test(s)){if(/recei(?:pt|ved)[^.;]{0,45}(?:purchase[ -]order|\bPO\b)|(?:purchase[ -]order|\bPO\b)[^.;]{0,35}recei(?:pt|ved)/i.test(s))return 'PO receipt';if(/(?:issu(?:e|ed|ance)|creat(?:ion|ed)|plac(?:ement|ed)|releas(?:e|ed))[^.;]{0,55}(?:purchase[ -]order|\bPO\b)|(?:purchase[ -]order|\bPO\b)[^.;]{0,35}(?:issu|creat|plac|releas)/i.test(s))return 'PO issuance';return 'PO';}
  return /award/i.test(s)?'award':/(?:from|after|following|receipt of)\s+(?:the\s+)?(?:advance\s+)?payment|advance payment receipt/i.test(s)?'payment':goodsAcceptance?'goods acceptance':/acceptance/i.test(s)?'acceptance':null;
 }
 export function recordSupplierQuery(state,vendor,text,at=new Date().toISOString()){

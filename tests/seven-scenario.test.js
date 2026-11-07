@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';
 import {sevenSupplierScenario,sevenSupplierTerms,scenarioSupplierStatus,sevenScenarioGuide} from '../src/scenario.js';
-import {sevenRows,sevenTerms,sevenResolution,simulationRows,simulationText,simulationEvidence} from '../src/simulation.js';
+import {sevenRows,sevenTerms,sevenResolution,simulationRows,simulationText,simulationEvidence,supplierCatalogEntry} from '../src/simulation.js';
 import {participatingVendors,vendorShortlist,rfxReadiness,buyerClarifications,comparison,commercialRequirements,quoteRedFlags,quoteSummary,priceObservation,normalize,analyzeAward,awardReadiness,freezeDecision} from '../src/domain.js';
 import {sevenReference} from '../scripts/seven-reference.mjs';
 const base=JSON.parse(fs.readFileSync(new URL('../dataset/rfx.json',import.meta.url)));
@@ -18,6 +18,25 @@ test('pending supplier acknowledgement remains required but does not prevent ana
 test('source revisions supply only requested missing lines and evidence, with no stale values on final offers',()=>{const r=sevenSupplierScenario(base,{guided:false});assert.equal(sevenRows(r,2).length,27);const f=sevenResolution('Please quote missing lines and provide certificate evidence.');assert.equal(sevenRows(r,2,1,f).length,30);assert.match(simulationEvidence(r,'Jaipur Paper',2,1,f),/2028-03-31/);assert.doesNotMatch(simulationEvidence(r,'Jaipur Paper',2,1,f),/2020-01-01/);assert.match(simulationText(r,'QuickDesk',4),/100% advance/);assert.equal(simulationText(r,'NorthStar',6),'');assert(!/NaN|Infinity/.test(simulationText(r,'Bharat',1)));});
 
 test('Jaipur declaration cannot override its contradictory expired evidence',()=>{const r=sevenSupplierScenario(base,{guided:false});assert.match(simulationText(r,'Jaipur Paper',2),/certificate meets the contract qualification/);assert.match(simulationEvidence(r,'Jaipur Paper',2),/2020-01-01/);});
+test('supplier sources preserve offer validity and constrained genuine HP toner models',()=>{
+ const r=sevenSupplierScenario(base,{guided:false});r.terms='Offers must remain valid until 31 December 2026.';
+ for(const [index,vendor] of ['Metro','Bharat','Jaipur Paper','Rajan','QuickDesk','Pioneer'].entries()){
+  const text=simulationText(r,vendor,index,1,sevenResolution('Quote the missing lines.'));assert.match(text,/Quotation valid through 31 December 2026/);
+  for(const model of ['12A','88A','05A'])assert.match(text,new RegExp('offered brand HP, model '+model));
+ }
+});
+test('supplier paper catalog matches confirmed grades whether in name or specification',()=>{
+ for(const [grade,id] of [[75,1],[70,2],[80,3]])assert.equal(supplierCatalogEntry({name:'A4 paper',spec:grade+' GSM, white, 500 sheets per ream',unit:'reams'}).id,id);
+ assert.equal(supplierCatalogEntry({name:'A3 paper',spec:'75 GSM, white, 500 sheets per ream',unit:'reams'}).id,4);
+ assert.equal(supplierCatalogEntry({name:'A4 paper',spec:'A new unpriced grade',unit:'reams'}),null);
+});
+test('generic commercial replies preserve replacement trigger and QuickDesk refused freight scope',()=>{
+ const r=sevenSupplierScenario(base,{guided:false});r.questions=[{id:'terms',text:'Confirm acceptance of our commercial terms and all exceptions.',gate:false}];
+ assert.match(simulationText(r,'Metro',0),/within 7 calendar days of notification at no additional cost/);
+ const quick=simulationText(r,'QuickDesk',4);
+ assert.match(quick,/Fixed freight \d+ INR for all awarded items at Delhi and Bengaluru only; Pune is not served/);
+ assert.match(quick,/100% advance/);
+});
 
 test('the exact copyable walkthrough messages produce the required source revisions',()=>{const r=sevenSupplierScenario(base,{guided:false});const flags=Object.fromEntries(sevenScenarioGuide.clarifications.map(([v,m])=>[v,sevenResolution(m)]));assert(flags.Bharat.delivery);assert.match(sevenTerms(r,1,flags.Bharat).delivery,/12 calendar days/);assert(flags['Jaipur Paper'].offers&&flags['Jaipur Paper'].evidence);assert(flags.Rajan.units&&flags.Rajan.specs);assert(flags.Pioneer.coverage&&flags.Pioneer.availability&&flags.Pioneer.freight&&flags.Pioneer.evidence);});
 test('payment clarification changes actual normal supplier sources to the full buyer condition, not QuickDesk or unrelated topics',()=>{

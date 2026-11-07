@@ -4,6 +4,17 @@ const rfx=JSON.parse(fs.readFileSync(new URL('../dataset/rfx.json',import.meta.u
 const request=b=>new Request('https://example.test/api',{method:'POST',headers:{'content-type':'application/json',origin:'https://example.test'},body:JSON.stringify(b)});
 const config={allowLive:true,key:'fake-test-key-never-sent-to-a-provider',model:'mock-model'};
 const response=text=>({id:'mock-response',output:[{type:'message',role:'assistant',content:[{type:'output_text',text}]}]});
+test('buyer suggestions use strict output and exact open-question membership without changing requirements',async()=>{
+ const draft={...structuredClone(rfx),buyerClarifications:['What delivery lead time do you require?','What payment terms should apply?']},before=structuredClone(draft),original=globalThis.fetch;
+ let suggestions=draft.buyerClarifications.map(question=>({question,answer:'An editable proposed policy.',rationale:'Buyer approval required.'})),payload;
+ globalThis.fetch=async(url,opts)=>{payload=JSON.parse(opts.body);return new Response(JSON.stringify(response(JSON.stringify({suggestions}))));};
+ try{
+  let result=await handleAPI(request({action:'suggestClarifications',config,rfx:draft}));
+  assert.equal(result.status,200);assert.deepEqual((await result.json()).suggestions,suggestions);assert.deepEqual(draft,before);
+  assert.equal(payload.text.format.strict,true);assert.match(JSON.stringify(payload.input),/NOT confirmed requirements/);
+  for(const invalid of [[suggestions[0],suggestions[0]],[suggestions[0]],[...suggestions.slice(0,1),{...suggestions[1],question:'Unrelated question'}],[suggestions[0],{...suggestions[1],answer:' '}]]){suggestions=invalid;result=await handleAPI(request({action:'suggestClarifications',config,rfx:draft}));assert.equal(result.status,400);}
+ }finally{globalThis.fetch=original;}
+});
 test('live AI disabled prevents any outbound request even if a key exists',async()=>{const original=globalThis.fetch;let calls=0;globalThis.fetch=async()=>{calls++;throw Error('Unexpected outbound call');};try{const r=await handleAPI(request({action:'ping',config:{allowLive:false,key:'test'}}));assert.equal(r.status,400);assert.match((await r.json()).error,/disabled/);assert.equal(calls,0);}finally{globalThis.fetch=original;}});
 test('configured endpoint cannot become an arbitrary credential proxy',()=>{assert.throws(()=>apiConfig({config:{...config,base:'https://attacker.example/v1/'}}),/official/);assert.throws(()=>apiConfig({config:{...config,base:'https://api.openai.com/evil'}}),/endpoint/);});
 test('empty browser fields correctly inherit Azure server configuration',()=>{const x=apiConfig({config:{base:'',model:'',key:''}},{OPENAI_API_KEY:'test',MODEL_BASE_URL:'https://sample.openai.azure.com/openai/v1/',MODEL_DEPLOYMENT:'azure-deployment'});assert.equal(x.model,'azure-deployment');assert.equal(x.url,'https://sample.openai.azure.com/openai/v1/responses');});
