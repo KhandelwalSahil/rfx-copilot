@@ -17,9 +17,9 @@ let app = (await read('src/app.js'))
   .replace('/*RFX*/', () => rfx)
   .replace('/*ASSETS*/', '{}');
 app = stripExports(await read('src/rfq-pdf.js')) + '\nconst rfqFontAssets=' + JSON.stringify(fontAssets) + ';\n' + app;
-const end = app.lastIndexOf('save();render();');
-if (end < 0) throw new Error('App initialization marker is missing');
-app = app.slice(0, end) + await read('src/flow.js') + "\nsave();render();if(serverAiDefault)task('Connecting to configured AI...',()=>api({action:'ping'}));";
+const startup = /^save\(\);render\(\);\r?$/m;
+if (!startup.test(app)) throw new Error('App initialization marker is missing');
+app = app.replace(startup, '') + '\n' + await read('src/flow.js') + "\nsave();render();if(serverAiDefault)task('Connecting to configured AI...',()=>api({action:'ping'}));";
 let page = await read('src/page.html');
 for (const [marker, value] of [
   ['/*APP*/', app],

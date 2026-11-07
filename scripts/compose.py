@@ -6,7 +6,9 @@ domain=(P/'src/domain.js').read_text().replace('export ','')+'\n'+(P/'src/simula
 app=(P/'src/app.js').read_text().replace('/*DOMAIN*/',domain).replace('/*RFX*/',(P/'dataset/rfx.json').read_text()).replace('/*ASSETS*/',json.dumps(assets))
 fontAssets={f.name:base64.b64encode(f.read_bytes()).decode() for f in (P/'src/fonts').glob('*.ttf')}
 app=(P/'src/rfq-pdf.js').read_text().replace('export ','')+'\nconst rfqFontAssets='+json.dumps(fontAssets)+';\n'+app
-app=app.rsplit('save();render();',1)[0]+(P/'src/flow.js').read_text()+"\nsave();render();if(serverAiDefault)task('Connecting to configured AI...',()=>api({action:'ping'}));"
+startup=r'^save\(\);render\(\);\r?$'
+if not re.search(startup,app,flags=re.M):raise RuntimeError('App initialization marker is missing')
+app=re.sub(startup,'',app,count=1,flags=re.M)+'\n'+(P/'src/flow.js').read_text()+"\nsave();render();if(serverAiDefault)task('Connecting to configured AI...',()=>api({action:'ping'}));"
 page=(P/'src/page.html').read_text().replace('/*APP*/',app).replace('/*JSZIP*/',(P/'src/jszip.min.js').read_text()).replace('/*PDFLIB*/',(P/'src/vendor/pdf-lib.min.js').read_text()).replace('/*FONTKIT*/',(P/'src/vendor/fontkit.umd.min.js').read_text())
 server=re.sub(r'^import .*?;\n', '', (P/'src/server.js').read_text(), flags=re.M).replace('export ', '')
 worker=domain+'\nconst page='+json.dumps(page)+';\n'+server+'''

@@ -5,6 +5,7 @@ import { createServer, requestUrl } from '../scripts/dev.mjs';
 import worker from '../worker/index.js';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
+import { sevenReference } from '../scripts/seven-reference.mjs';
 
 const appSource = readFileSync(new URL('../src/app.js', import.meta.url), 'utf8').replace('\nsave();render();', '');
 function appFunction(name) {
@@ -60,6 +61,36 @@ test('hosted failure dialogs do not expose model settings', async () => {
     assert.match(elements['#overlay'].innerHTML, /Provider unavailable/);
     assert.equal(elements['#overlay'].innerHTML.includes('data-action="settings"'), !managed);
   }
+});
+
+test('composed Ask page reopens saved answers and handles failures without dropping late helpers', async () => {
+  const html = await (await worker.fetch(new Request('https://rfx.test/'))).text();
+  const script = html.match(/<script type="module">([\s\S]*?)<\/script>/)[1];
+  const elements = { '#root': { innerHTML: '' }, '#overlay': { innerHTML: '' }, '#status': { innerHTML: '' } };
+  const context = vm.createContext({
+    structuredClone,
+    window: { addEventListener() {} },
+    document: { querySelector: selector => elements[selector] || null, querySelectorAll: () => [] },
+    localStorage: { getItem: () => null, setItem() {} },
+  });
+  vm.runInContext(script, context);
+  const { rfx, data } = sevenReference({ revised: true });
+  context.fixture = { rfx, data };
+  vm.runInContext(`
+    state.rfx=fixture.rfx;state.data=fixture.data;state.sent=true;
+    const scope=comparisonScope();
+    state.chat=[{role:'assistant',text:'Saved supplier analysis',version:state.version,scope,
+      traces:[{tool:'analyze_award',result:runTool('analyze_award',{},state.data,state.rfx)}]}];
+    view='compare';insightsMode='compare';render();
+    insightsMode='ask';render();
+  `, context);
+  assert.match(elements['#root'].innerHTML, /id="askform"/);
+  assert.match(elements['#root'].innerHTML, /Saved supplier analysis/);
+  assert.match(elements['#root'].innerHTML, /30 requested items\. Mandatory qualifications applied/);
+  await vm.runInContext("task('Asking',async()=>{throw Error('Model request failed: unavailable');})", context);
+  assert.match(elements['#overlay'].innerHTML, /We could not process this AI request/);
+  assert.match(elements['#root'].innerHTML, /id="askform"/);
+  assert.equal(vm.runInContext('busy', context), false);
 });
 
 test('automatic AI opt-in requires a server flag and credential, without exposing the credential', async () => {

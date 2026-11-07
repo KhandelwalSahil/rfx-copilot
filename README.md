@@ -53,7 +53,7 @@ There are no public usage caps: anyone with the URL can incur model charges.
 Keep provider quota low, monitor costs and add access/usage controls before
 broader distribution. Do not upload confidential buyer information to a public demo.
 
-The private image is `paiosacr44326.azurecr.io/rfx-copilot:20261107-4`.
+The private image is `paiosacr44326.azurecr.io/rfx-copilot:20261107-5`.
 Image pulls use the `rfx-copilot-identity` managed identity with `AcrPull`.
 Rebuild with `az acr build` using the included Dockerfile, then update the app
 image with `az containerapp update`. Git pushes do not automatically deploy.
