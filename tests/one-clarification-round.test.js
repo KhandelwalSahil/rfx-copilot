@@ -89,3 +89,14 @@ test('supplier queries after clarification append only a buyer message, preservi
  assert.throws(()=>recordSupplierQuery({...state,sent:false},'Bharat','Hi'),/invited/);
  assert.equal(state.threads.Bharat.length,count);
 });
+test('completed-round source concerns offer an unchanged-document retry without offering it for settled non-negotiable conflicts',()=>{
+ const {rfx,data}=sevenReference({revised:true});
+ data.Bharat.blockers=['Q1 certificate is only evidenced by the supplied record; the source itself is a synthetic demo register rather than an official certificate.'];
+ const state={rfx,data,packages:{Bharat:{round:1},QuickDesk:{round:1}}};
+ const context=vm.createContext({state,quoteSummary,supplierOfferStatus,revisedSimulationRepair:()=>null,esc:v=>String(v)});
+ const flow=fs.readFileSync(new URL('../src/flow.js',import.meta.url),'utf8');
+ vm.runInContext(flow.slice(flow.indexOf('function supplierClarificationComposer('),flow.indexOf('\nsendPage=function(')),context);
+ assert.match(vm.runInContext("supplierClarificationComposer('Bharat')",context),/Re-extract revised reply/);
+ assert.equal(supplierOfferStatus(data,rfx,'Bharat').ready,false);
+ assert.doesNotMatch(vm.runInContext("supplierClarificationComposer('QuickDesk')",context),/Re-extract revised reply/);
+});

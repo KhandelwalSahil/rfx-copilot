@@ -88,7 +88,7 @@ function supplierClarificationComposer(v){
  if(!state.data[v])return '';
  const outcome=supplierOfferStatus(state.data,state.rfx,v);
  if(state.packages[v]?.round>0){
-  const summary=quoteSummary(state.data[v],state.rfx),repair=revisedSimulationRepair(v),discount=state.data[v].discount,retry=summary.internalReviews.length>0||discount&&!(discount.rate>0&&discount.rate<1)||summary.issues.some(i=>i.questionIds?.length);
+  const summary=quoteSummary(state.data[v],state.rfx),repair=revisedSimulationRepair(v),discount=state.data[v].discount,retry=summary.internalReviews.length>0||discount&&!(discount.rate>0&&discount.rate<1)||summary.issues.some(i=>i.questionIds?.length||!i.nonNegotiable);
   return `<section class="notice ${outcome.tone}"><b>${outcome.ready?'Ready for comparison':outcome.label}</b><p>Clarification round completed.${outcome.ready?' This offer meets the current comparison checks.':' The offer is not ready for comparison for the reasons below.'}</p>${outcome.reasons.length?'<ul>'+outcome.reasons.map(r=>'<li>'+esc(r)+'</li>').join('')+'</ul>':''}${repair?'<p>A previous simulator parser missed part of your existing clarification. Rebuild that same reply and extract it again; no second supplier question is sent.</p><button data-action="repairRevisedReply">Reprocess simulated revised reply</button>':retry?'<p>Retry the extraction against the existing revised documents; no supplier question is sent.</p><button data-action="repairRevisedReply">Re-extract revised reply</button>':''}</section>`;
  }
 
