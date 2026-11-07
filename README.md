@@ -53,7 +53,7 @@ There are no public usage caps: anyone with the URL can incur model charges.
 Keep provider quota low, monitor costs and add access/usage controls before
 broader distribution. Do not upload confidential buyer information to a public demo.
 
-The private image is `paiosacr44326.azurecr.io/rfx-copilot:20261107-7`.
+The private image is `paiosacr44326.azurecr.io/rfx-copilot:20261107-8`.
 Image pulls use the `rfx-copilot-identity` managed identity with `AcrPull`.
 Rebuild with `az acr build` using the included Dockerfile, then update the app
 image with `az containerapp update`. Git pushes do not automatically deploy.
@@ -116,6 +116,10 @@ The product starts with an empty RFx. Enter the purchase requirement in the chat
 The seven-supplier source profile supports targeted revisions for Bharat, Jaipur Paper, Rajan and Pioneer, an expensive Metro offer and incompatible QuickDesk terms. No model extraction or analyst response is prefilled. Historical scenario fixtures remain offline developer references only; the product does not expose sample loaders or a test walkthrough.
 
 Only one supplier clarification round is sent. Older generated revisions can expose **Reprocess simulated revised reply** when the simulator missed part of the original clarification; this rebuilds that same round and performs real extraction, retaining source history. Uploaded or modified documents are never rebuilt. **Re-extract revised reply** retries internal extraction against unchanged documents, without another supplier question. Genuine source uncertainty, missing evidence and non-negotiable conflicts remain unresolved; awards use eligible offers, not forced passes. Missing dated FX is a buyer evaluation decision in Compare & Ask.
+
+Payment clarifications update the actual generated supplier commitment to the buyer's full payment condition, including valid-invoice receipt and goods acceptance, whichever occurs later. Invoice-only, invoice-acceptance and earlier-of terms remain distinct; payment eligibility is not forced. QuickDesk retains its advance-payment and Pune conflicts, with a red requirement-not-met notice. Demo registration references remain unverified context, not proof of official registration; an actual buyer requirement for registration proof must still be met.
+
+**Ask supplier**, beside View quote and in the comparison actions, accepts further informal queries even after the formal clarification round. Drafts are saved. Sending adds a buyer message to the same inbox conversation without generating a supplier reply, sending external email, changing source documents or reopening an award recommendation. Actual revised quotes still require upload and extraction.
 
 Bulk extraction reads at most two suppliers concurrently and retains successful results when another supplier fails. Changed requirements, replaced attachments and same-supplier edits still invalidate in-flight results. Typing batches browser-storage writes, with immediate saves for completed actions and pending-input flush on page exit. GPT-5 requests use concise output and shorter literal citations without reducing the output budget or evidence checks. Hosting remains scale-to-zero to avoid idle charges, so the first request after inactivity can still incur a cold start.
 

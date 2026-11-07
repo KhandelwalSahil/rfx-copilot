@@ -2,7 +2,7 @@ from pathlib import Path
 import json,base64,mimetypes,re
 P=Path(__file__).resolve().parents[1]
 assets={}
-domain=(P/'src/domain.js').read_text().replace('export ','')+'\n'+(P/'src/simulation.js').read_text().replace('export ','')
+domain=(P/'src/domain.js').read_text().replace('export ','')+'\n'+re.sub(r'^import .*?;\r?\n', '', (P/'src/simulation.js').read_text(), flags=re.M).replace('export ','')
 app=(P/'src/app.js').read_text().replace('/*DOMAIN*/',domain).replace('/*RFX*/',(P/'dataset/rfx.json').read_text()).replace('/*ASSETS*/',json.dumps(assets))
 fontAssets={f.name:base64.b64encode(f.read_bytes()).decode() for f in (P/'src/fonts').glob('*.ttf')}
 app=(P/'src/rfq-pdf.js').read_text().replace('export ','')+'\nconst rfqFontAssets='+json.dumps(fontAssets)+';\n'+app

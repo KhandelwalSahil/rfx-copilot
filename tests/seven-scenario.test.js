@@ -20,3 +20,22 @@ test('source revisions supply only requested missing lines and evidence, with no
 test('Jaipur declaration cannot override its contradictory expired evidence',()=>{const r=sevenSupplierScenario(base,{guided:false});assert.match(simulationText(r,'Jaipur Paper',2),/certificate meets the contract qualification/);assert.match(simulationEvidence(r,'Jaipur Paper',2),/2020-01-01/);});
 
 test('the exact copyable walkthrough messages produce the required source revisions',()=>{const r=sevenSupplierScenario(base,{guided:false});const flags=Object.fromEntries(sevenScenarioGuide.clarifications.map(([v,m])=>[v,sevenResolution(m)]));assert(flags.Bharat.delivery);assert.match(sevenTerms(r,1,flags.Bharat).delivery,/12 calendar days/);assert(flags['Jaipur Paper'].offers&&flags['Jaipur Paper'].evidence);assert(flags.Rajan.units&&flags.Rajan.specs);assert(flags.Pioneer.coverage&&flags.Pioneer.availability&&flags.Pioneer.freight&&flags.Pioneer.evidence);});
+test('payment clarification changes actual normal supplier sources to the full buyer condition, not QuickDesk or unrelated topics',()=>{
+ const r=sevenSupplierScenario(base,{guided:false});
+ r.terms='Payment is due within 30 calendar days of receiving a valid invoice and accepting the delivered goods, whichever occurs later; No advance payment is acceptable.';
+ const f=sevenResolution('Confirm acceptance of our payment terms ('+r.terms+'). State any exception explicitly.');
+ assert(f.payment);
+ for(const [i,v] of ['Metro','Bharat','Jaipur Paper','Rajan','QuickDesk','Pioneer'].entries()){
+  const prior=sevenTerms(r,i,sevenResolution('Confirm freight.')).payment;
+  const revised=sevenTerms(r,i,f).payment;
+  const payment=commercialRequirements({answers:[],commercialTerms:{payment:{value:revised,source:'supplier-offer'}}},r).find(c=>c.field==='payment');
+  if(i===4){assert.equal(prior,revised);assert.equal(payment.status,'fail');}
+  else{
+   assert.match(prior,/from invoice receipt/);
+   assert.match(revised,/receiving a valid invoice and accepting the delivered goods, whichever occurs later/);
+   assert.equal(payment.status,'pass',v);
+   assert(simulationText(r,v,i,1,f).includes(revised));
+  }
+ }
+ assert.equal(sevenResolution('Confirm freight.').payment,false);
+});

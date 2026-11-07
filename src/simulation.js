@@ -1,3 +1,4 @@
+import {supplierBuyerPayment} from './domain.js';
 // Generates fictional source documents only; comparison data still requires extraction.
 export function simulationResolution(message='',prior={}){
  const t=message.toLowerCase();return {offers:!!prior.offers||/missing.*(?:line|offer)|unquoted|not quoted|not offered|omitted|all.*lines|please quote this requested item|confirm.*(?:current|historical|last year|rates|prices)/.test(t),freight:!!prior.freight||/freight|shipping|delivery charg/.test(t),specs:!!prior.specs||/brand|model|specification|deviation/.test(t),delivery:!!prior.delivery||/delivery date|lead time|delivery commitment|\d+\s+(?:(?:calendar|business|working)\s+)?days/.test(t),evidence:!!prior.evidence||/evidence|certificate|certification|gst|quality/.test(t)};
@@ -98,7 +99,7 @@ export function simulationEvidence(rfx,vendor,index,round=0,resolved=null){
 // Seven-supplier rehearsal sources. This module never writes extraction or analyst results.
 export function sevenResolution(message='',prior={}){
  const t=message.toLowerCase(),base=simulationResolution(message,prior);
- return {...base,units:!!prior.units||/pack|carton|100.piece|pricing unit|typed.*(?:rate|schedule)/.test(t),coverage:!!prior.coverage||/pune|hub|location|coverage/.test(t),availability:!!prior.availability||/availab(?:ility|le)|stock|supply commitment/.test(t)};
+ return {...base,payment:!!prior.payment||/payment|invoice|credit period|advance/.test(t),units:!!prior.units||/pack|carton|100.piece|pricing unit|typed.*(?:rate|schedule)/.test(t),coverage:!!prior.coverage||/pune|hub|location|coverage/.test(t),availability:!!prior.availability||/availab(?:ility|le)|stock|supply commitment/.test(t)};
 }
 export function sevenRows(rfx,index,round=0,resolved=null){
  if(index===6)return [];
@@ -113,7 +114,7 @@ export function sevenRows(rfx,index,round=0,resolved=null){
  });
 }
 export function sevenTerms(rfx,index,flags){
- const all='Delhi, Bengaluru and Pune',delivery=index===4?'10 calendar days from PO issuance to Delhi and Bengaluru only. Pune is not served. No subcontractor or alternative Pune delivery is available.':index===5&&!flags.coverage?'12 calendar days from PO issuance to Delhi and Bengaluru. Pune coverage is not confirmed; route and supply availability require confirmation.':(index===1&&!flags.delivery?'21':'12')+' calendar days from PO issuance to '+all+'. We commit to this lead time for every awarded line and monthly call-off.',payment=index===4?'100% advance payment before dispatch is mandatory and non-negotiable. No credit period offered.':'Payment within 30 calendar days from invoice receipt. No advance payment required.';
+ const all='Delhi, Bengaluru and Pune',delivery=index===4?'10 calendar days from PO issuance to Delhi and Bengaluru only. Pune is not served. No subcontractor or alternative Pune delivery is available.':index===5&&!flags.coverage?'12 calendar days from PO issuance to Delhi and Bengaluru. Pune coverage is not confirmed; route and supply availability require confirmation.':(index===1&&!flags.delivery?'21':'12')+' calendar days from PO issuance to '+all+'. We commit to this lead time for every awarded line and monthly call-off.',payment=index===4?'100% advance payment before dispatch is mandatory and non-negotiable. No credit period offered.':flags.payment&&/payment|invoice|advance|credit/i.test(rfx.terms||'')?'We confirm and accept these payment conditions: '+supplierBuyerPayment(rfx)+'.':'Payment within 30 calendar days from invoice receipt. No advance payment required.';
  return {delivery,payment,freight:index===5&&!flags.freight?null:sourceFreight(rfx,index),validity:sourceValidity(rfx),availability:index===5&&!flags.availability?'Supply availability for Pune is not confirmed. Other hubs can be served.':index===4?'Supply availability confirmed for Delhi and Bengaluru only. Pune is not served.':'Supply availability confirmed for the full forecast and monthly call-offs at Delhi, Bengaluru and Pune. No MOQ or minimum volume commitment.'};
 }
 function sevenAnswer(rfx,q,vendor,index,round,f,rows,terms){

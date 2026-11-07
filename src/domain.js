@@ -689,7 +689,7 @@ export function consolidateQuoteIssues(issues,rfx){
   if(g.sources.length&&!g.source)g.source=g.sources[0];return g;
  });
 }
-function supplierBuyerPayment(rfx){const clauses=(rfx.terms||'').split(/[.;\n]/).filter(t=>/payment|invoice|advance|credit/i.test(t));return clauses.join('; ').trim()||'state the credit period, its starting point and any advance payment';}
+export function supplierBuyerPayment(rfx){const clauses=(rfx.terms||'').split(/[.;\n]/).filter(t=>/payment|invoice|advance|credit/i.test(t));return clauses.join('; ').trim()||'state the credit period, its starting point and any advance payment';}
 
 export function quoteSummary(x,rfx){
  const items=rfx.lines.map(l=>{const q=x.quotes.find(q=>q.lineId===l.id),n=normalize(q,l,rfx);return {id:l.id,name:l.name,quantity:l.quantity,unit:l.unit,rawPrice:q?.price??null,currency:q?.currency||null,pricingUnit:q?.unit||null,price:n.price,amount:n.price===null?null:round(n.price*l.quantity),state:n.state,why:n.why||'',source:q?.source||'',excerpt:q?.excerpt||'',availability:q?(typeof q.availability==='string'&&q.availability.trim()?q.availability:'Stock availability not stated'):'Not quoted'};});
@@ -749,9 +749,30 @@ function supplierTerm(x,rfx,key){
 // Buyer requirements are evaluated independently of whether the LLM reported a blocker.
 export function commercialTrigger(value){
  const s=String(value||'');
- if(/invoice/i.test(s)){if(/accept(?:ed|ance)[^.;]{0,35}invoice|invoice[^.;]{0,35}accept/i.test(s))return 'invoice acceptance';if(/recei(?:pt|ved)[^.;]{0,35}invoice|invoice[^.;]{0,35}recei(?:pt|ved)/i.test(s))return 'invoice receipt';return 'invoice';}
+ const clause=s.split(/[.;\n]/).find(c=>/\binvoice\b/i.test(c))||s;
+ const goodsAcceptance=/\baccept(?:ance|ed|ing|s)?\s+(?:(?:of|the|all|delivered|received|supplied)\s+){0,4}(?:goods|delivery|items)\b|\b(?:goods|delivery|items)\s+(?:(?:are|is|were|was|have been|has been)\s+)?accept(?:ed|ance)\b/i.test(clause);
+ if(/\binvoice\b/i.test(s)){
+  const accepted=/\baccept(?:ed|ance|ing)?\s+(?:(?:of|the|a|an|valid)\s+){0,4}invoice\b|\binvoice\s+(?:(?:is|was|has been|being)\s+)?accept(?:ed|ance)\b/i.test(clause);
+  const received=/\b(?:receipt|receiving|receive(?:d)?)\s+(?:(?:of|the|a|an|valid)\s+){0,4}invoice\b|\binvoice\s+(?:(?:is|was|has been|being)\s+)?(?:receipt|received)\b/i.test(clause);
+  const invoice=accepted?'invoice acceptance':received?'invoice receipt':'invoice';
+  if(goodsAcceptance){
+   if(/(?:goods acceptance|acceptance of (?:the )?(?:delivered )?goods)\s+(?:is\s+)?(?:not required|not necessary|excluded)|(?:regardless|irrespective) of (?:goods acceptance|(?:the )?acceptance of (?:the )?(?:delivered )?goods)/i.test(s))return invoice;
+   if(/\bearlier of\b|\bwhichever\s+(?:(?:is|occurs|comes)\s+)?(?:the\s+)?(?:earlier|first)\b/i.test(clause))return invoice+' or goods acceptance (whichever is earlier)';
+   if(/\blater of\b|\bwhichever\s+(?:(?:is|occurs|comes)\s+)?(?:the\s+)?later\b/i.test(clause))return invoice+' and goods acceptance (whichever is later)';
+   if(!/\bor\b/i.test(clause)&&/\band\b|\bboth\b/i.test(clause))return invoice+' and goods acceptance (whichever is later)';
+   return invoice+' or goods acceptance';
+  }
+  return invoice;
+ }
  if(/\bPO\b|purchase order/i.test(s)){if(/recei(?:pt|ved)[^.;]{0,45}(?:purchase order|\bPO\b)|(?:purchase order|\bPO\b)[^.;]{0,35}recei(?:pt|ved)/i.test(s))return 'PO receipt';if(/(?:issu(?:e|ed|ance)|creat(?:ion|ed)|plac(?:ement|ed)|releas(?:e|ed))[^.;]{0,55}(?:purchase order|\bPO\b)|(?:purchase order|\bPO\b)[^.;]{0,35}(?:issu|creat|plac|releas)/i.test(s))return 'PO issuance';return 'PO';}
- return /award/i.test(s)?'award':/(?:from|after|following|receipt of)\s+(?:the\s+)?(?:advance\s+)?payment|advance payment receipt/i.test(s)?'payment':/acceptance/i.test(s)?'acceptance':null;
+ return /award/i.test(s)?'award':/(?:from|after|following|receipt of)\s+(?:the\s+)?(?:advance\s+)?payment|advance payment receipt/i.test(s)?'payment':goodsAcceptance?'goods acceptance':/acceptance/i.test(s)?'acceptance':null;
+}
+export function recordSupplierQuery(state,vendor,text,at=new Date().toISOString()){
+ if(!state.sent||!participatingVendors(state.rfx).includes(vendor))throw Error('Choose a supplier invited to this RFQ before sending a query.');
+ if(typeof text!=='string'||!text.trim()||text.trim().length>6000)throw Error('Enter a query of 1–6,000 characters before sending.');
+ const message={at,role:'buyer',text:text.trim(),files:[],kind:'query'};
+ state.threads||={};(state.threads[vendor]||=[]).push(message);
+ return message;
 }
 export function commercialRequirements(x,rfx){
  if(!x)return [];
@@ -794,6 +815,7 @@ export function commercialRequirements(x,rfx){
    if(noAdvance&&requiresAdvance){status='fail';detail='Supplier requests advance payment against our no-advance requirement.';}
    else if(payment&&offeredDays!==Number(payment[1]))detail='Payment period differs from or does not confirm the buyer’s '+payment[1]+'-day term; confirm acceptance before award.';
    else if(payment&&trigger(payment[0])&&trigger(term.value)!==trigger(payment[0]))detail='Confirm payment uses the buyer’s '+trigger(payment[0])+' reference point.';
+   else if(payment&&/\bvalid invoice\b/i.test(payment[0])&&!/\bvalid invoice\b/i.test(term.value))detail='Confirm payment starts only after receiving a valid invoice, as required by the buyer.';
    else if(noAdvance&&!noAdvanceOffered)detail='Confirm explicitly that no advance payment is required.';
    else{status='pass';detail='Sourced payment conditions meet the stated buyer requirements.';}
   }

@@ -3,7 +3,7 @@ import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 const root = new URL('../', import.meta.url);
 const read = path => readFile(new URL(path, root), 'utf8');
 const stripExports = text => text.replaceAll('export ', '');
-const domain = stripExports(await read('src/domain.js')) + '\n' + stripExports(await read('src/simulation.js'));
+const domain = stripExports(await read('src/domain.js')) + '\n' + stripExports((await read('src/simulation.js')).replace(/^import .*?;\r?\n/gm, ''));
 const fontAssets = {};
 for (const name of await readdir(new URL('src/fonts/', root))) {
   if (name.endsWith('.ttf')) {
