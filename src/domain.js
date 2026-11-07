@@ -236,9 +236,10 @@ export function supplierOfferStatus(data,rfx,vendor){
  const bid=comparison(data,rfx).find(c=>c.vendor===vendor),s=quoteSummary(x,rfx),readable=reasons=>reasons.map(reason=>{for(const q of rfx.questions)reason=reason.split(q.id+':').join(q.text+':');return reason;});
  if(bid?.total!=null)return {code:'ready',label:'Comparable',tone:'',ready:true,reasons:[]};
  if(x.meta?.rfxSignature&&x.meta.rfxSignature!==rfxSourceSignature(rfx))return {code:'stale',label:'Previous RFQ version',tone:'warn',ready:false,reasons:['This extracted offer is for an earlier requirement.']};
- if(s.redFlags.length)return {code:'conflict',label:'Requirement not met',tone:'bad',ready:false,reasons:[...s.redFlags.map(f=>f.detail),...(s.internalReviews.length?[s.internalReviews.length+' prices also need internal source verification.']:[]),...(s.quality.status!=='pass'?readable(s.quality.reasons):[])]};
+ if(s.redFlags.some(f=>f.nonNegotiable))return {code:'conflict',label:'Requirement not met',tone:'bad',ready:false,reasons:[...s.redFlags.map(f=>f.detail),...(s.internalReviews.length?[s.internalReviews.length+' prices also need internal source verification.']:[]),...(s.quality.status!=='pass'?readable(s.quality.reasons):[])]};
  if(s.internalReviews.length)return {code:'extraction',label:'Source review pending',tone:'warn',ready:false,reasons:[s.internalReviews.length+' prices need internal source verification. No supplier clarification is required for this check.']};
  if(s.quality.status!=='pass')return {code:'evidence',label:s.quality.status==='fail'?'Documents do not meet requirements':'Required documents missing',tone:s.quality.status==='fail'?'bad':'warn',ready:false,reasons:readable(s.quality.reasons)};
+ if(s.redFlags.length)return {code:'conflict',label:'Requirement not met',tone:'bad',ready:false,reasons:s.redFlags.map(f=>f.detail)};
  if(s.items.some(l=>l.why==='Valid FX assumption required'))return {code:'evaluation',label:'Exchange rate needed',tone:'warn',ready:false,reasons:['Add a buyer-approved, dated INR-per-USD rate in Compare & Ask. No supplier clarification is needed for currency conversion.']};
  return {code:'incomplete',label:'Offer incomplete',tone:'warn',ready:false,reasons:s.issues.length?s.issues.map(i=>i.title+': '+i.detail):bid?.reasons||['The offer is not ready for full-scope comparison.']};
 }

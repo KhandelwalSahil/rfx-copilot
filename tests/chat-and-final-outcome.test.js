@@ -11,4 +11,9 @@ test('known incompatible commitments remain red while price and evidence reviews
  assert(status.reasons.some(r=>/source verification/.test(r)));assert(status.reasons.some(r=>/evidence missing/.test(r)));
  assert.equal(comparison(data,rfx).find(c=>c.vendor==='QuickDesk').total,null);
 });
+test('pending delivery coverage is not promoted to a permanent failure ahead of missing evidence',()=>{
+ const {rfx,data}=sevenReference();data.Pioneer.blockers.push('Pune delivery coverage requires confirmation.');
+ const status=supplierOfferStatus(data,rfx,'Pioneer');
+ assert.equal(status.code,'evidence');assert.equal(status.tone,'warn');assert.equal(status.ready,false);
+});
 test('comparison has one action area and no repeated evidence or review rows',()=>{const app=fs.readFileSync(new URL('../src/app.js',import.meta.url),'utf8'),start=app.indexOf('function supplierOverview('),end=app.indexOf('\nfunction ',start+10),matrix=app.slice(start,end);assert.doesNotMatch(matrix,/Review needed|Points to review|RFQ evidence|View final outcome/);assert.match(app,/Outstanding items/);assert.match(app,/if\(proposal.noChange\)/);});
