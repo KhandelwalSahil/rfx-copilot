@@ -1,4 +1,4 @@
-import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import {buyerClarifications,clarificationReply,reconcileBuyerClarifications,retainBuyerCommercialAnswers,retainBuyerQualifications,commercialTrigger} from '../src/domain.js';
+import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import {buyerClarifications,clarificationReply,reconcileBuyerClarifications,retainBuyerCommercialAnswers,retainBuyerQualifications,retainBuyerQuoteDeadlines,commercialTrigger} from '../src/domain.js';
 const rfx=JSON.parse(fs.readFileSync(new URL('../dataset/rfx.json',import.meta.url)));
 test('approved buyer answers keep question context without treating suggested numbers in questions as facts',()=>{
  const questions=['What payment terms do you require?','What delivery lead time do you require?'];
@@ -39,6 +39,17 @@ test('independently stated mandatory qualifications stay atomic and survive unre
  const changed=clarificationReply(['What payment terms?'],{'What payment terms?':'Payment within 30 days; sample approval is no longer mandatory.'}).message;
  assert.equal(retainBuyerQualifications(draft,{current:result,request:changed}),draft);
  assert.equal(retainBuyerQualifications(draft,{current:result,request:changed+'\n\nAdditional buyer instructions: Remove the certificate.'}),draft);
+});
+test('confirmed submission clock and offer-validity clauses survive lossy drafting',()=>{
+ const source='The quotation submission deadline is 20 November 2026 at 6:00 p.m. IST. Offers must remain valid until 31 December 2026.';
+ const draft={...structuredClone(rfx),scope:'Annual contract.',deadline:'2026-11-21',terms:'Offers valid until 1 December 2026; Freight remains fixed. Replacements within seven days.'};
+ const result=retainBuyerQuoteDeadlines(draft,source);
+ assert.equal(result.deadline,'2026-11-20');assert.match(result.terms,/6:00 p\.m\. IST/);assert.match(result.terms,/31 December 2026/);
+ assert.doesNotMatch(result.terms,/1 December 2026;/);assert.match(result.terms,/Freight remains fixed/);assert.match(result.terms,/Replacements within seven days/);
+ assert.equal(draft.deadline,'2026-11-21');
+ assert.equal(retainBuyerQuoteDeadlines(draft,'Contract period 1 April 2027 to 31 March 2028. Certificate valid through 31 March 2028.'),draft);
+ const conflict=retainBuyerQuoteDeadlines(draft,'Submission deadline 20 November 2026.\nSubmission deadline 21 November 2026.');
+ assert.equal(conflict,draft);
 });
 test('missing business fields join the same buyer clarification list',()=>{const r={...rfx,deadline:'',fx:null,fxDate:'',buyerClarifications:['What pen tip size is required?']};const q=buyerClarifications(r);assert.equal(q.length,2);assert.match(q[0],/tip size/);assert(q.some(s=>/submit their quotations/.test(s)));assert(!q.some(s=>/exchange rate/.test(s)));});
 test('already-listed quote deadline and FX questions are not duplicated',()=>{const q=buyerClarifications({...rfx,deadline:'',fx:null,fxDate:'',buyerClarifications:['What is the quotation deadline?','Which exchange rate and date should we use?']});assert.equal(q.length,1);});

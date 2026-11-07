@@ -86,6 +86,21 @@ export function retainBuyerAllocation(draft,sourceText){
  next.terms=[next.terms,...policy].filter(Boolean).join('\n');
  return next;
 }
+export function retainBuyerQuoteDeadlines(draft,sourceText){
+ const split=text=>String(text).split(/\r?\n|(?<=;)\s*|(?<!\b[ap]\.m\.)(?<=[.!?])\s+(?=[A-Z])/i);
+ const submission=text=>text.match(/\b(?:quotation\s+|quote\s+|offer\s+|bid\s+)?submission\s+deadline\b[^;\n]*/i);
+ const validity=text=>text.match(/\b(?:quotations?|quotes?|offers?|bids?)\b[^.;\n]{0,60}\bvalid(?:ity)?\b[^.;\n]{0,30}\b(?:until|through|to)\b[^;\n]*/i);
+ const clauses=split(sourceText).map(s=>s.trim()).filter(Boolean);
+ const due=clauses.filter(s=>submission(s)&&dateInText(submission(s)[0])),valid=clauses.filter(s=>validity(s)&&dateInText(validity(s)[0]));
+ const dates=new Set(due.map(s=>dateInText(submission(s)[0])));
+ const policy=[...new Set([...(dates.size===1?due:[]),...valid])];if(!policy.length)return draft;
+ const date=dates.size===1?[...dates][0]:null;
+ if(policy.every(s=>(draft.scope+'\n'+draft.terms).includes(s))&&(!date||draft.deadline===date))return draft;
+ const next=clone(draft);
+ for(const field of ['scope','terms'])next[field]=split(next[field]||'').filter(s=>!(dates.size===1&&submission(s))&&!(valid.length&&validity(s))).join(' ');
+ next.terms=[next.terms,...policy].filter(Boolean).join('\n');if(date)next.deadline=date;
+ return next;
+}
 export function retainBuyerCommercialAnswers(draft,message){
  let next=draft;
  for(const match of String(message).matchAll(/^\d+\. Question: ([^\n]+)\nBuyer answer: ([\s\S]*?)(?=\n\n\d+\. Question:|\n\nAdditional buyer instructions:|$)/gm)){
